@@ -118,6 +118,7 @@ textarea { resize: vertical; min-height: 60px; }
             <input type="file" id="file-tbl" accept=".tbl,.TBL" onchange="handleFile(this.files[0],'tbl')">
             <div>Drop .TBL file here or click to browse</div>
           </div>
+          <div id="upload-match-tbl" class="help"></div>
         </div>
         <div>
           <label>Download File #0 (.BIN)</label>
@@ -125,6 +126,7 @@ textarea { resize: vertical; min-height: 60px; }
             <input type="file" id="file-bin" accept=".bin,.BIN" onchange="handleFile(this.files[0],'bin')">
             <div>Drop .BIN file here or click to browse</div>
           </div>
+          <div id="upload-match-bin" class="help"></div>
         </div>
       </div>
     </div>
@@ -136,29 +138,31 @@ textarea { resize: vertical; min-height: 60px; }
 <!-- Section 2: Filenames & Header -->
 <div class="section">
   <div class="section-hdr" onclick="toggleSection(this)">
-    <span class="num">2</span> Review Filenames &amp; Header Information <span class="arrow">&#9660;</span>
+    <span class="num">2</span> Combination Filename &amp; Derived Names <span class="arrow">&#9660;</span>
   </div>
   <div class="section-body">
-    <div class="grid2">
-      <div>
-        <label>Embedded TBL Filename</label>
-        <p class="help">ASCII only. This name is stored in the header, not the OS filename.</p>
-        <input type="text" id="fname-tbl" oninput="validateFname('tbl');invalidateResult()">
-        <div id="fname-tbl-err" class="err-msg"></div>
-      </div>
-      <div>
-        <label>Embedded BIN Filename</label>
-        <p class="help">ASCII only. This name is stored in the header, not the OS filename.</p>
-        <input type="text" id="fname-bin" oninput="validateFname('bin');invalidateResult()">
-        <div id="fname-bin-err" class="err-msg"></div>
+    <label>Combination Filename (.ENC)</label>
+    <p class="help">Enter the .ENC filename specified in the technical confirmation report. The .TBL and .BIN names are derived from it automatically.</p>
+    <input type="text" id="fname-out" class="med" placeholder="e.g. XXXXX-XXXXX_M0.ENC" oninput="onEncNameChange()">
+    <div id="fname-out-err" class="err-msg"></div>
+    <div id="derived-names" style="margin-top:12px;display:none">
+      <div class="grid2">
+        <div>
+          <label>Additional Information File (derived)</label>
+          <div class="file-info" style="display:flex;align-items:center;gap:8px;margin:0">
+            <span style="font-family:monospace;font-weight:600" id="fname-tbl-display"></span>
+          </div>
+        </div>
+        <div>
+          <label>Download File #0 (derived)</label>
+          <div class="file-info" style="display:flex;align-items:center;gap:8px;margin:0">
+            <span style="font-family:monospace;font-weight:600" id="fname-bin-display"></span>
+          </div>
+        </div>
       </div>
     </div>
-    <div style="margin-top:12px">
-      <label>Output Filename</label>
-      <p class="help">The .ENC file that will be downloaded.</p>
-      <input type="text" id="fname-out" class="med" oninput="validateOutFname();invalidateResult()">
-      <div id="fname-out-err" class="err-msg"></div>
-    </div>
+    <input type="hidden" id="fname-tbl">
+    <input type="hidden" id="fname-bin">
   </div>
 </div>
 
@@ -424,13 +428,18 @@ function setMode(m) {
     tblData = null;
     binData = null;
     lookupTable = null;
+    uploadedNames = { tbl: '', bin: '' };
     document.getElementById('fname-tbl').value = '';
     document.getElementById('fname-bin').value = '';
     document.getElementById('fname-out').value = '';
-    document.getElementById('fname-tbl-err').textContent = '';
-    document.getElementById('fname-bin-err').textContent = '';
+    document.getElementById('fname-out-err').textContent = '';
+    document.getElementById('derived-names').style.display = 'none';
     document.getElementById('file-info-tbl').style.display = 'none';
     document.getElementById('file-info-bin').style.display = 'none';
+    const umTbl = document.getElementById('upload-match-tbl');
+    const umBin = document.getElementById('upload-match-bin');
+    if (umTbl) umTbl.textContent = '';
+    if (umBin) umBin.textContent = '';
     document.getElementById('lut-info').textContent = '';
     document.getElementById('lut-text').value = '';
   }
@@ -438,6 +447,7 @@ function setMode(m) {
 }
 
 let uploadToken = { tbl: 0, bin: 0 };
+let uploadedNames = { tbl: '', bin: '' };
 
 function handleFile(file, type) {
   if (!file) return;
@@ -450,15 +460,14 @@ function handleFile(file, type) {
     const data = new Uint8Array(reader.result);
     if (type === 'tbl') {
       tblData = data;
-      document.getElementById('fname-tbl').value = file.name;
+      uploadedNames.tbl = file.name;
       showFileInfo('tbl', file.name, data);
     } else {
       binData = data;
-      document.getElementById('fname-bin').value = file.name;
+      uploadedNames.bin = file.name;
       showFileInfo('bin', file.name, data);
     }
-    const tblBase = document.getElementById('fname-tbl').value.replace(/\.[^.]+$/, '');
-    if (tblBase) document.getElementById('fname-out').value = tblBase + '.ENC';
+    updateUploadMatch();
     invalidateResult();
   };
   reader.readAsArrayBuffer(file);
@@ -485,38 +494,76 @@ function showFileInfo(type, name, data) {
 
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function validateFname(type) {
-  const el = document.getElementById('fname-' + type);
-  const err = document.getElementById('fname-' + type + '-err');
-  const v = el.value;
-  if (v.length === 0) { err.textContent = 'Filename is required.'; return false; }
-  for (let i = 0; i < v.length; i++) {
-    const c = v.charCodeAt(i);
-    if (c < 0x20 || c > 0x7E) {
-      err.textContent = `Non-ASCII character at position ${i} (code ${c}). Only printable ASCII (0x20-0x7E) is allowed.`;
-      return false;
-    }
+function deriveNames(encName) {
+  if (!encName || !encName.toUpperCase().endsWith('.ENC')) return null;
+  const base = encName.slice(0, -4);
+  if (base.length === 0) return null;
+  for (let i = 0; i < base.length; i++) {
+    const c = base.charCodeAt(i);
+    if (c < 0x20 || c > 0x7E) return null;
   }
-  const expectedExt = type === 'tbl' ? '.TBL' : '.BIN';
-  if (!v.toUpperCase().endsWith(expectedExt)) {
-    err.textContent = `Warning: expected ${expectedExt} extension.`;
-    return true;
-  }
-  err.textContent = '';
-  return true;
+  return { tbl: base + '.TBL', bin: base + '_00.BIN' };
 }
 
-function validateOutFname() {
-  const v = document.getElementById('fname-out').value;
-  const el = document.getElementById('fname-out-err');
-  if (!el) return true;
-  if (v.length === 0) { el.textContent = 'Output filename is required.'; return false; }
-  if (!v.toUpperCase().endsWith('.ENC')) {
-    el.textContent = 'Warning: expected .ENC extension.';
-    return true;
+function onEncNameChange() {
+  const encName = document.getElementById('fname-out').value.trim();
+  const err = document.getElementById('fname-out-err');
+  const derivedEl = document.getElementById('derived-names');
+
+  if (!encName) {
+    err.textContent = '';
+    derivedEl.style.display = 'none';
+    document.getElementById('fname-tbl').value = '';
+    document.getElementById('fname-bin').value = '';
+    invalidateResult();
+    return;
   }
-  el.textContent = '';
-  return true;
+
+  const names = deriveNames(encName);
+  if (!names) {
+    err.textContent = 'Must end with .ENC and contain only printable ASCII.';
+    derivedEl.style.display = 'none';
+    document.getElementById('fname-tbl').value = '';
+    document.getElementById('fname-bin').value = '';
+    invalidateResult();
+    return;
+  }
+
+  err.textContent = '';
+  document.getElementById('fname-tbl').value = names.tbl;
+  document.getElementById('fname-bin').value = names.bin;
+  document.getElementById('fname-tbl-display').textContent = names.tbl;
+  document.getElementById('fname-bin-display').textContent = names.bin;
+  derivedEl.style.display = '';
+  updateUploadMatch();
+  invalidateResult();
+}
+
+function updateUploadMatch() {
+  const names = deriveNames(document.getElementById('fname-out').value.trim());
+  const tblMatch = document.getElementById('upload-match-tbl');
+  const binMatch = document.getElementById('upload-match-bin');
+  if (!tblMatch || !binMatch) return;
+
+  if (uploadedNames.tbl) {
+    if (names && uploadedNames.tbl === names.tbl) {
+      tblMatch.innerHTML = '<span style="color:var(--ok)">Uploaded filename matches: ' + esc(uploadedNames.tbl) + '</span>';
+    } else if (names) {
+      tblMatch.innerHTML = '<span style="color:var(--err)">Mismatch: uploaded "' + esc(uploadedNames.tbl) + '", expected "' + esc(names.tbl) + '"</span>';
+    }
+  } else {
+    tblMatch.textContent = names ? 'Expected: ' + names.tbl : '';
+  }
+
+  if (uploadedNames.bin) {
+    if (names && uploadedNames.bin === names.bin) {
+      binMatch.innerHTML = '<span style="color:var(--ok)">Uploaded filename matches: ' + esc(uploadedNames.bin) + '</span>';
+    } else if (names) {
+      binMatch.innerHTML = '<span style="color:var(--err)">Mismatch: uploaded "' + esc(uploadedNames.bin) + '", expected "' + esc(names.bin) + '"</span>';
+    }
+  } else {
+    binMatch.textContent = names ? 'Expected: ' + names.bin : '';
+  }
 }
 
 function parseObfInfo() {
@@ -590,9 +637,8 @@ function loadExample() {
   tblData = new Uint8Array(EXAMPLE_TBL_DATA);
   binData = new Uint8Array(EXAMPLE_BIN_DATA);
   lookupTable = makeDescendingTable();
-  document.getElementById('fname-tbl').value = EXAMPLE_TBL_NAME;
-  document.getElementById('fname-bin').value = EXAMPLE_BIN_NAME;
   document.getElementById('fname-out').value = 'XXXXX-XXXXX_M0.ENC';
+  onEncNameChange();
   document.getElementById('id-tbl').value = '5A';
   document.getElementById('id-bin').value = '57';
   document.getElementById('hdr-reserved').value = '00000000000000';
@@ -629,10 +675,17 @@ function getFileId(type) {
 function generate() {
   const errors = [];
 
+  const encName = document.getElementById('fname-out').value.trim();
+  const names = deriveNames(encName);
+  if (!names) errors.push('Combination filename must end with .ENC and contain only printable ASCII.');
+
   if (!tblData) errors.push('No .TBL file loaded.');
   if (!binData) errors.push('No .BIN file loaded.');
-  if (!validateFname('tbl')) errors.push('Invalid TBL filename.');
-  if (!validateFname('bin')) errors.push('Invalid BIN filename.');
+
+  if (names) {
+    document.getElementById('fname-tbl').value = names.tbl;
+    document.getElementById('fname-bin').value = names.bin;
+  }
 
   const tblId = getFileId('tbl');
   const binId = getFileId('bin');
@@ -931,13 +984,18 @@ function downloadEnc() {
 function resetAll() {
   tblData = null; binData = null;
   lookupTable = mode === 'example' ? makeDescendingTable() : null;
+  uploadedNames = { tbl: '', bin: '' };
   document.getElementById('fname-tbl').value = '';
   document.getElementById('fname-bin').value = '';
   document.getElementById('fname-out').value = '';
-  document.getElementById('fname-tbl-err').textContent = '';
-  document.getElementById('fname-bin-err').textContent = '';
+  document.getElementById('fname-out-err').textContent = '';
+  document.getElementById('derived-names').style.display = 'none';
   document.getElementById('file-info-tbl').style.display = 'none';
   document.getElementById('file-info-bin').style.display = 'none';
+  const umTbl = document.getElementById('upload-match-tbl');
+  const umBin = document.getElementById('upload-match-bin');
+  if (umTbl) umTbl.textContent = '';
+  if (umBin) umBin.textContent = '';
   document.getElementById('trace-offset').value = '';
   document.getElementById('trace-result').innerHTML = '';
   document.getElementById('trace-range').textContent = '';

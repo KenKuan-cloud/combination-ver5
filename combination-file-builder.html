@@ -156,7 +156,8 @@ textarea { resize: vertical; min-height: 60px; }
     <div style="margin-top:12px">
       <label>Output Filename</label>
       <p class="help">The .ENC file that will be downloaded.</p>
-      <input type="text" id="fname-out" class="med" oninput="invalidateResult()">
+      <input type="text" id="fname-out" class="med" oninput="validateOutFname();invalidateResult()">
+      <div id="fname-out-err" class="err-msg"></div>
     </div>
   </div>
 </div>
@@ -420,16 +421,32 @@ function setMode(m) {
     document.getElementById('lut-info').textContent = 'Using descending table: FF FE FD ... 01 00';
     document.getElementById('lut-err').textContent = '';
   } else {
+    tblData = null;
+    binData = null;
     lookupTable = null;
+    document.getElementById('fname-tbl').value = '';
+    document.getElementById('fname-bin').value = '';
+    document.getElementById('fname-out').value = '';
+    document.getElementById('fname-tbl-err').textContent = '';
+    document.getElementById('fname-bin-err').textContent = '';
+    document.getElementById('file-info-tbl').style.display = 'none';
+    document.getElementById('file-info-bin').style.display = 'none';
     document.getElementById('lut-info').textContent = '';
+    document.getElementById('lut-text').value = '';
   }
   invalidateResult();
 }
 
+let uploadToken = { tbl: 0, bin: 0 };
+
 function handleFile(file, type) {
   if (!file) return;
+  const token = ++uploadToken[type];
+  if (type === 'tbl') tblData = null; else binData = null;
+  invalidateResult();
   const reader = new FileReader();
   reader.onload = function() {
+    if (uploadToken[type] !== token) return;
     const data = new Uint8Array(reader.result);
     if (type === 'tbl') {
       tblData = data;
@@ -480,7 +497,25 @@ function validateFname(type) {
       return false;
     }
   }
+  const expectedExt = type === 'tbl' ? '.TBL' : '.BIN';
+  if (!v.toUpperCase().endsWith(expectedExt)) {
+    err.textContent = `Warning: expected ${expectedExt} extension.`;
+    return true;
+  }
   err.textContent = '';
+  return true;
+}
+
+function validateOutFname() {
+  const v = document.getElementById('fname-out').value;
+  const el = document.getElementById('fname-out-err');
+  if (!el) return true;
+  if (v.length === 0) { el.textContent = 'Output filename is required.'; return false; }
+  if (!v.toUpperCase().endsWith('.ENC')) {
+    el.textContent = 'Warning: expected .ENC extension.';
+    return true;
+  }
+  el.textContent = '';
   return true;
 }
 
@@ -519,14 +554,16 @@ function parseLutText() {
 
 function loadLutFile(file) {
   if (!file) return;
+  lookupTable = null;
+  invalidateResult();
   const reader = new FileReader();
   reader.onload = function() {
     const data = new Uint8Array(reader.result);
     const err = document.getElementById('lut-err');
     const info = document.getElementById('lut-info');
-    if (data.length !== 256) { err.textContent = `File is ${data.length} bytes; must be exactly 256.`; lookupTable = null; return; }
+    if (data.length !== 256) { err.textContent = `File is ${data.length} bytes; must be exactly 256.`; lookupTable = null; invalidateResult(); return; }
     const vErr = validatePermutation(data);
-    if (vErr) { err.textContent = vErr; lookupTable = null; return; }
+    if (vErr) { err.textContent = vErr; lookupTable = null; invalidateResult(); return; }
     err.textContent = '';
     lookupTable = data;
     info.textContent = `Valid permutation table loaded from file (${data.length} bytes).`;

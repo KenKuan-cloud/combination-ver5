@@ -89,12 +89,37 @@ textarea { resize: vertical; min-height: 60px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } .row { flex-direction: column; } }
 .example-note { background: var(--warn-bg); border: 1px solid var(--warn); border-radius: 6px; padding: 8px 12px; font-size: 0.82rem; color: var(--warn); margin-bottom: 12px; }
+.coverage-panel { background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-top: 12px; font-size: 0.82rem; }
+.coverage-panel h3 { font-size: 0.9rem; margin-bottom: 8px; }
+.cov-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
+.cov-row:last-child { border-bottom: none; }
+.cov-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cov-done { background: var(--ok); }
+.cov-partial { background: var(--warn); }
+.cov-missing { background: var(--err); }
+.cov-na { background: var(--border); }
+.type-selector { display: flex; gap: 12px; align-items: center; margin: 8px 0; }
+.type-selector label { display: inline; font-weight: 600; margin: 0; }
+.type-radio { margin-right: 4px; }
+.dl-slot { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+.dl-slot-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 600; font-size: 0.85rem; }
+.dl-slot-role { color: var(--text2); font-weight: 400; font-size: 0.8rem; }
+.dl-slot .file-id-display { font-family: 'SF Mono','Consolas',monospace; color: var(--accent); font-size: 0.82rem; }
+.readonly-field { background: #f3f4f6; border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-family: 'SF Mono','Consolas',monospace; font-size: 0.85rem; color: var(--text2); }
+.test-results { max-height: 500px; overflow-y: auto; }
+.test-pass { color: var(--ok); }
+.test-fail { color: var(--err); font-weight: 600; }
+.packing-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 8px; }
+.packing-table th, .packing-table td { padding: 4px 8px; border: 1px solid var(--border); text-align: left; }
+.packing-table th { background: #f3f4f6; font-weight: 600; }
+.packing-table td { font-family: 'SF Mono','Consolas',monospace; }
+.type-guide { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 10px 12px; font-size: 0.82rem; color: #0c4a6e; margin: 8px 0; line-height: 1.5; }
 </style>
 </head>
 <body>
 
 <h1>TBL + BIN Combination File Builder</h1>
-<p class="subtitle">Combine an additional information file (.TBL) and a download file (.BIN) into one obfuscated .ENC file.</p>
+<p class="subtitle">Combine additional information (.TBL) and download files (.BIN) into obfuscated combination files (.ENC) per Section 4.</p>
 <div id="selftest-result"></div>
 
 <!-- Section 1: Mode & Files -->
@@ -108,30 +133,39 @@ textarea { resize: vertical; min-height: 60px; }
       <button class="mode-btn" id="btn-custom" onclick="setMode('custom')">Custom Mode</button>
     </div>
     <div id="example-note" class="example-note">
-      Example mode loads fixed sample data for learning and verification. The example settings are demonstration values and do not define all production fields.
+      Example mode loads fixed sample data for learning and verification. Uses a single TBL + single BIN (#0) with descending lookup table.
     </div>
     <div id="custom-inputs" style="display:none">
-      <div class="grid2">
-        <div>
-          <label>Additional Information File (.TBL)</label>
-          <div class="upload-area" id="drop-tbl" onclick="document.getElementById('file-tbl').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="event.preventDefault();this.classList.remove('drag');handleFile(event.dataTransfer.files[0],'tbl')">
-            <input type="file" id="file-tbl" accept=".tbl,.TBL" onchange="handleFile(this.files[0],'tbl')">
-            <div>Drop .TBL file here or click to browse</div>
-          </div>
-          <div id="upload-match-tbl" class="help"></div>
+      <!-- TYPE selection -->
+      <div style="margin-bottom:12px">
+        <label>Combination Type</label>
+        <div class="type-selector">
+          <label><input type="radio" name="combo-type" value="TYPE2" class="type-radio" checked onchange="onTypeChange()"> TYPE2</label>
+          <label><input type="radio" name="combo-type" value="TYPE3" class="type-radio" onchange="onTypeChange()"> TYPE3</label>
         </div>
-        <div>
-          <label>Download File #0 (.BIN)</label>
-          <div class="upload-area" id="drop-bin" onclick="document.getElementById('file-bin').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="event.preventDefault();this.classList.remove('drag');handleFile(event.dataTransfer.files[0],'bin')">
-            <input type="file" id="file-bin" accept=".bin,.BIN" onchange="handleFile(this.files[0],'bin')">
-            <div>Drop .BIN file here or click to browse</div>
-          </div>
-          <div id="upload-match-bin" class="help"></div>
+        <div class="type-guide" id="type-guide">
+          <b>TYPE2:</b> CAN KWP, or CAN UDS without external ROM / USB-memory / calibration-data reprogramming. Download files #0 through #9.<br>
+          <b>TYPE3:</b> CAN UDS with external ROM, USB-memory, or calibration-data reprogramming. Download files #0 through #17.
         </div>
       </div>
+
+      <!-- TBL upload -->
+      <label>Additional Information File (.TBL)</label>
+      <div class="upload-area" id="drop-tbl" onclick="document.getElementById('file-tbl').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="event.preventDefault();this.classList.remove('drag');handleFile(event.dataTransfer.files[0],'tbl')">
+        <input type="file" id="file-tbl" accept=".tbl,.TBL" onchange="handleFile(this.files[0],'tbl')">
+        <div>Drop .TBL file here or click to browse</div>
+      </div>
+      <div id="upload-match-tbl" class="help"></div>
+      <div id="file-info-tbl" class="file-info" style="display:none"></div>
+      <div id="tbl-validation-msg" class="err-msg"></div>
+
+      <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)">
+
+      <!-- Download file slots -->
+      <label>Download Files (.BIN)</label>
+      <p class="help">Upload download files in the slots below. File IDs are auto-calculated per Section 4.</p>
+      <div id="download-slots"></div>
     </div>
-    <div id="file-info-tbl" class="file-info" style="display:none"></div>
-    <div id="file-info-bin" class="file-info" style="display:none"></div>
   </div>
 </div>
 
@@ -142,57 +176,39 @@ textarea { resize: vertical; min-height: 60px; }
   </div>
   <div class="section-body">
     <label>Combination Filename (.ENC)</label>
-    <p class="help">Enter the .ENC filename specified in the technical confirmation report. The .TBL and .BIN names are derived from it automatically.</p>
+    <p class="help">Enter the .ENC filename specified in the technical confirmation report. All embedded filenames are derived from it.</p>
     <input type="text" id="fname-out" class="med" placeholder="e.g. XXXXX-XXXXX_M0.ENC" oninput="onEncNameChange()">
     <div id="fname-out-err" class="err-msg"></div>
     <div id="derived-names" style="margin-top:12px;display:none">
-      <div class="grid2">
-        <div>
-          <label>Additional Information File (derived)</label>
-          <div class="file-info" style="display:flex;align-items:center;gap:8px;margin:0">
-            <span style="font-family:monospace;font-weight:600" id="fname-tbl-display"></span>
-          </div>
-        </div>
-        <div>
-          <label>Download File #0 (derived)</label>
-          <div class="file-info" style="display:flex;align-items:center;gap:8px;margin:0">
-            <span style="font-family:monospace;font-weight:600" id="fname-bin-display"></span>
-          </div>
-        </div>
-      </div>
+      <label>Derived filenames</label>
+      <div id="derived-names-list" class="file-info" style="font-family:monospace;font-size:0.82rem"></div>
     </div>
-    <input type="hidden" id="fname-tbl">
-    <input type="hidden" id="fname-bin">
   </div>
 </div>
 
 <!-- Section 3: Obfuscation Settings -->
 <div class="section">
   <div class="section-hdr" onclick="toggleSection(this)">
-    <span class="num">3</span> Configure Obfuscation Settings <span class="arrow">&#9660;</span>
+    <span class="num">3</span> Obfuscation Settings <span class="arrow">&#9660;</span>
   </div>
   <div class="section-body">
+    <label>Header Configuration (read-only)</label>
+    <p class="help">File IDs are auto-calculated (TBL=0x5A, download #n=0x57-n). Reserved bytes are fixed to zero per specification.</p>
     <div class="grid2">
       <div>
-        <label>File ID for .TBL block</label>
-        <p class="help">1-byte hex value identifying the TBL block. Example: 5A</p>
-        <input type="text" id="id-tbl" class="short" value="5A" oninput="invalidateResult()">
+        <label>TBL File ID</label>
+        <div class="readonly-field" id="disp-id-tbl">0x5A</div>
       </div>
       <div>
-        <label>File ID for .BIN block</label>
-        <p class="help">1-byte hex value identifying the BIN block. Example: 57</p>
-        <input type="text" id="id-bin" class="short" value="57" oninput="invalidateResult()">
+        <label>Reserved Header Bytes (7 bytes)</label>
+        <div class="readonly-field" id="disp-reserved">00 00 00 00 00 00 00</div>
       </div>
     </div>
-    <div style="margin-top:12px">
-      <label>Unspecified header bytes (7 bytes)</label>
-      <p class="help">Zero in the supplied example. Enter 14 hex digits. These bytes occupy offsets 0x01-0x07 in each block header.</p>
-      <input type="text" id="hdr-reserved" class="med" value="00000000000000" oninput="invalidateResult()">
-      <div id="hdr-reserved-err" class="err-msg"></div>
-    </div>
+    <div id="download-ids-display" style="margin-top:8px"></div>
+
     <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)">
-    <label>Obfuscation Information (16 bytes)</label>
-    <p class="help">Appended unchanged to the end of the output. The byte at index 1 gives the left-rotation count for the demonstrated algorithm.</p>
+    <label>Obfuscation Information</label>
+    <p class="help">Raw bytes appended unchanged after obfuscated data. Minimum 2 bytes required. Byte[1] gives the left-rotation count. Length varies by annex definition (not verified).</p>
     <input type="text" id="obf-info" value="02 0A 00 00 00 00 00 00 00 00 00 00 00 00 00 00" oninput="parseObfInfo();invalidateResult()">
     <div id="obf-info-err" class="err-msg"></div>
     <div id="obf-info-detail" class="help" style="margin-top:4px"></div>
@@ -259,18 +275,52 @@ textarea { resize: vertical; min-height: 60px; }
       <button class="btn btn-outline" onclick="resetAll()">Reset</button>
     </div>
     <div id="gen-status" style="margin-top:8px"></div>
+    <div id="packing-info" style="margin-top:4px"></div>
     <div id="verify-status" style="margin-top:4px"></div>
+  </div>
+</div>
+
+<!-- Section 6: Validation Coverage -->
+<div class="section">
+  <div class="section-hdr" onclick="toggleSection(this)">
+    <span class="num">6</span> Validation Coverage <span class="arrow">&#9660;</span>
+  </div>
+  <div class="section-body">
+    <p class="help">Shows which specification sections are implemented, partially covered, or depend on definitions not yet available.</p>
+    <div id="coverage-panel" class="coverage-panel"></div>
+  </div>
+</div>
+
+<!-- Section 7: Internal Tests -->
+<div class="section">
+  <div class="section-hdr collapsed" onclick="toggleSection(this)">
+    <span class="num">7</span> Internal Test Suite <span class="arrow">&#9660;</span>
+  </div>
+  <div class="section-body hidden">
+    <p class="help">Run the comprehensive test suite to verify the obfuscation algorithm, header construction, File ID calculation, TBL validation, name derivation, and packing order.</p>
+    <div class="btn-group" style="margin-top:0">
+      <button class="btn btn-primary" onclick="runTests()">Run All Tests</button>
+    </div>
+    <div id="test-results" class="test-results" style="margin-top:8px"></div>
   </div>
 </div>
 
 <script>
 'use strict';
 
+const MAX_FILE_SIZE = 4294967295;
+
 let mode = 'example';
-let tblData = null, binData = null;
+let comboType = 'TYPE2';
+let tblData = null;
+let downloadFiles = {};
 let lookupTable = null;
 let generatedResult = null;
 let resultValid = false;
+
+let uploadToken = { tbl: 0 };
+let uploadedNames = { tbl: '' };
+for (let i = 0; i <= 17; i++) { uploadToken['dl' + i] = 0; uploadedNames['dl' + i] = ''; }
 
 const EXAMPLE_TBL_NAME = 'XXXXX-XXXXX_M0.TBL';
 const EXAMPLE_BIN_NAME = 'XXXXX-XXXXX_M0_00.BIN';
@@ -286,6 +336,40 @@ const EXPECTED_OUTPUT = new Uint8Array([
   0xDB,0xD7,0xD3,0xCF,0xCB,0xC7,0xC3,0x02,0x0A,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
   0x00,0x00,0x00,0x00,0x00,0x00,0x00
 ]);
+
+const DOWNLOAD_ROLES = [
+  'Application program',
+  'Application calibration data',
+  'External ROM data for the application',
+  'USB-memory data for the application',
+  'Reserved for future use',
+  'Reserved for future use',
+  'Reserved for future use',
+  'Reserved for future use',
+  'Reserved for future use',
+  'Reserved for future use',
+  'Application #2 program',
+  'Application #2 calibration data',
+  'External ROM data for the application #2',
+  'USB-memory data for the application #2',
+  'Reserved for future use',
+  'Reserved for future use',
+  'Reserved for future use',
+  'Reserved for future use'
+];
+
+function getFileId(n) {
+  if (n === 'tbl') return 0x5A;
+  return 0x57 - n;
+}
+
+function getMaxDownloads() {
+  return comboType === 'TYPE3' ? 18 : 10;
+}
+
+function getTblLineCount() {
+  return comboType === 'TYPE3' ? 300 : 100;
+}
 
 function makeDescendingTable() {
   const t = new Uint8Array(256);
@@ -305,10 +389,10 @@ function buildInverse(table) {
   return inv;
 }
 
-function buildHeader(fileId, reservedBytes, fnLen, dataLen) {
+function buildHeader(fileId, fnLen, dataLen) {
   const h = new Uint8Array(16);
   h[0] = fileId;
-  for (let i = 0; i < 7; i++) h[i + 1] = reservedBytes[i];
+  // bytes 1-7 are fixed zero (reserved)
   h[8]  = (fnLen >>> 24) & 0xFF;
   h[9]  = (fnLen >>> 16) & 0xFF;
   h[10] = (fnLen >>> 8) & 0xFF;
@@ -338,7 +422,7 @@ function concat(...arrays) {
 function hexByte(v) { return v.toString(16).toUpperCase().padStart(2, '0'); }
 function hexOffset(v) { return v.toString(16).toUpperCase().padStart(4, '0'); }
 
-function isAscii(s) {
+function isAsciiPrintable(s) {
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
     if (c < 0x20 || c > 0x7E) return false;
@@ -369,31 +453,13 @@ function validatePermutation(table) {
   if (table.length !== 256) return 'Table must contain exactly 256 bytes.';
   const seen = new Uint8Array(256);
   for (let i = 0; i < 256; i++) {
-    if (seen[table[i]]) return `Duplicate value: ${hexByte(table[i])} appears more than once.`;
+    if (seen[table[i]]) return 'Duplicate value: ' + hexByte(table[i]) + ' appears more than once.';
     seen[table[i]] = 1;
   }
   for (let i = 0; i < 256; i++) {
-    if (!seen[i]) return `Missing value: ${hexByte(i)} is not in the table.`;
+    if (!seen[i]) return 'Missing value: ' + hexByte(i) + ' is not in the table.';
   }
   return null;
-}
-
-// --- Self-test with non-symmetric table ---
-function selfTest() {
-  const table = new Uint8Array(256);
-  for (let i = 0; i < 256; i++) table[i] = (i + 1) % 256;
-  const inv = buildInverse(table);
-  const testByte = 0x05;
-  const rotCount = 2;
-  const rotated = rotateLeft8(testByte, rotCount);
-  const resultInverse = inv[rotated];
-  const resultDirect = table[rotated];
-  if (resultInverse === resultDirect) return { pass: false, msg: 'Non-symmetric test inconclusive: direct and inverse give same result.' };
-  const expected = resultInverse;
-  const singleInput = new Uint8Array([testByte]);
-  const obfuscated = obfuscateData(singleInput, inv, rotCount);
-  if (obfuscated[0] === expected) return { pass: true, msg: 'Internal self-test passed: inverse lookup correctly used (non-symmetric table).' };
-  return { pass: false, msg: 'Internal self-test FAILED: direct lookup used instead of inverse.' };
 }
 
 function obfuscateData(data, inverseTable, rotCount) {
@@ -405,11 +471,134 @@ function obfuscateData(data, inverseTable, rotCount) {
   return out;
 }
 
+function validateTblData(data) {
+  const errors = [];
+  for (let i = 0; i < data.length; i++) {
+    const b = data[i];
+    if (b === 0x0D || b === 0x0A) continue;
+    if (b < 0x20 || b > 0x7E) {
+      errors.push('Non-printable byte 0x' + hexByte(b) + ' at offset ' + i + '. TBL must contain only printable ASCII (0x20-0x7E) plus CR/LF.');
+      break;
+    }
+  }
+  let lineCount = 0;
+  let i = 0;
+  while (i < data.length) {
+    if (data[i] === 0x0D) {
+      if (i + 1 < data.length && data[i + 1] === 0x0A) {
+        lineCount++;
+        i += 2;
+      } else {
+        errors.push('Bare CR without LF at offset ' + i + '. TBL requires CR/LF line endings.');
+        break;
+      }
+    } else if (data[i] === 0x0A) {
+      errors.push('Bare LF without CR at offset ' + i + '. TBL requires CR/LF line endings.');
+      break;
+    } else {
+      i++;
+    }
+  }
+  if (errors.length === 0) {
+    const expected = getTblLineCount();
+    if (lineCount !== expected) {
+      errors.push('Line count: ' + lineCount + '. Expected ' + expected + ' lines for ' + comboType + '.');
+    }
+  }
+  return errors;
+}
+
+function deriveNames(encName) {
+  if (!encName || !encName.toUpperCase().endsWith('.ENC')) return null;
+  const base = encName.slice(0, -4);
+  if (base.length === 0) return null;
+  if (!isAsciiPrintable(base)) return null;
+  const names = { tbl: base + '.TBL' };
+  const max = getMaxDownloads();
+  for (let i = 0; i < max; i++) {
+    const nn = i.toString().padStart(2, '0');
+    names['dl' + i] = base + '_' + nn + '.BIN';
+  }
+  return names;
+}
+
+function selfTest() {
+  const table = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) table[i] = (i + 1) % 256;
+  const inv = buildInverse(table);
+  const testByte = 0x05;
+  const rotCount = 2;
+  const rotated = rotateLeft8(testByte, rotCount);
+  const resultInverse = inv[rotated];
+  const resultDirect = table[rotated];
+  if (resultInverse === resultDirect) return { pass: false, msg: 'Non-symmetric test inconclusive: direct and inverse give same result.' };
+  const singleInput = new Uint8Array([testByte]);
+  const obfuscated = obfuscateData(singleInput, inv, rotCount);
+  if (obfuscated[0] === resultInverse) return { pass: true, msg: 'Internal self-test passed: inverse lookup correctly used (non-symmetric table).' };
+  return { pass: false, msg: 'Internal self-test FAILED: direct lookup used instead of inverse.' };
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
 // --- UI ---
 function toggleSection(hdr) {
   hdr.classList.toggle('collapsed');
   const body = hdr.nextElementSibling;
   body.classList.toggle('hidden');
+}
+
+function onTypeChange() {
+  const radios = document.querySelectorAll('input[name="combo-type"]');
+  for (const r of radios) {
+    if (r.checked) { comboType = r.value; break; }
+  }
+  renderDownloadSlots();
+  onEncNameChange();
+  updateDownloadIdsDisplay();
+  invalidateResult();
+}
+
+function renderDownloadSlots() {
+  const container = document.getElementById('download-slots');
+  const max = getMaxDownloads();
+  let html = '';
+  for (let i = 0; i < max; i++) {
+    const nn = i.toString().padStart(2, '0');
+    const fid = getFileId(i);
+    const role = DOWNLOAD_ROLES[i];
+    html += '<div class="dl-slot" id="dl-slot-' + i + '">';
+    html += '<div class="dl-slot-hdr">';
+    html += 'Download #' + nn;
+    html += ' <span class="dl-slot-role">(' + esc(role) + ')</span>';
+    html += ' <span class="file-id-display">File ID: 0x' + hexByte(fid) + '</span>';
+    html += '</div>';
+    html += '<div class="upload-area" onclick="document.getElementById(\'file-dl' + i + '\').click()" ondragover="event.preventDefault();this.classList.add(\'drag\')" ondragleave="this.classList.remove(\'drag\')" ondrop="event.preventDefault();this.classList.remove(\'drag\');handleFile(event.dataTransfer.files[0],\'dl' + i + '\')">';
+    html += '<input type="file" id="file-dl' + i + '" accept=".bin,.BIN" style="display:none" onchange="handleFile(this.files[0],\'dl' + i + '\')">';
+    if (downloadFiles[i]) {
+      html += '<div style="color:var(--ok)">Loaded: ' + esc(uploadedNames['dl' + i]) + ' (' + downloadFiles[i].length + ' bytes)</div>';
+    } else {
+      html += '<div>Drop .BIN file here or click to browse</div>';
+    }
+    html += '</div>';
+    html += '<div id="upload-match-dl' + i + '" class="help"></div>';
+    html += '<div id="file-info-dl' + i + '" class="file-info" style="display:none"></div>';
+    html += '</div>';
+  }
+  container.innerHTML = html;
+  updateUploadMatch();
+}
+
+function updateDownloadIdsDisplay() {
+  const el = document.getElementById('download-ids-display');
+  const max = getMaxDownloads();
+  let html = '<label>Download File IDs (auto-calculated)</label><div style="font-family:monospace;font-size:0.82rem;color:var(--text2)">';
+  const items = [];
+  for (let i = 0; i < max; i++) {
+    items.push('#' + i.toString().padStart(2, '0') + '=0x' + hexByte(getFileId(i)));
+  }
+  html += items.join(', ');
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 function setMode(m) {
@@ -426,46 +615,61 @@ function setMode(m) {
     document.getElementById('lut-err').textContent = '';
   } else {
     tblData = null;
-    binData = null;
+    downloadFiles = {};
     lookupTable = null;
-    uploadedNames = { tbl: '', bin: '' };
-    document.getElementById('fname-tbl').value = '';
-    document.getElementById('fname-bin').value = '';
+    uploadedNames = { tbl: '' };
+    for (let i = 0; i <= 17; i++) uploadedNames['dl' + i] = '';
     document.getElementById('fname-out').value = '';
     document.getElementById('fname-out-err').textContent = '';
     document.getElementById('derived-names').style.display = 'none';
     document.getElementById('file-info-tbl').style.display = 'none';
-    document.getElementById('file-info-bin').style.display = 'none';
     const umTbl = document.getElementById('upload-match-tbl');
-    const umBin = document.getElementById('upload-match-bin');
     if (umTbl) umTbl.textContent = '';
-    if (umBin) umBin.textContent = '';
+    const tv = document.getElementById('tbl-validation-msg');
+    if (tv) tv.textContent = '';
     document.getElementById('lut-info').textContent = '';
     document.getElementById('lut-text').value = '';
+    renderDownloadSlots();
+    updateDownloadIdsDisplay();
   }
   invalidateResult();
 }
 
-let uploadToken = { tbl: 0, bin: 0 };
-let uploadedNames = { tbl: '', bin: '' };
-
 function handleFile(file, type) {
   if (!file) return;
   const token = ++uploadToken[type];
-  if (type === 'tbl') tblData = null; else binData = null;
+  if (type === 'tbl') {
+    tblData = null;
+  } else if (type.startsWith('dl')) {
+    const idx = parseInt(type.slice(2));
+    delete downloadFiles[idx];
+  }
   invalidateResult();
   const reader = new FileReader();
   reader.onload = function() {
     if (uploadToken[type] !== token) return;
     const data = new Uint8Array(reader.result);
+    if (data.length > MAX_FILE_SIZE) {
+      const el = type === 'tbl' ? document.getElementById('tbl-validation-msg') : document.getElementById('upload-match-' + type);
+      if (el) el.innerHTML = '<span style="color:var(--err)">File too large: ' + data.length + ' bytes. Maximum is 4,294,967,295 bytes (0xFFFFFFFF).</span>';
+      return;
+    }
     if (type === 'tbl') {
       tblData = data;
       uploadedNames.tbl = file.name;
       showFileInfo('tbl', file.name, data);
-    } else {
-      binData = data;
-      uploadedNames.bin = file.name;
-      showFileInfo('bin', file.name, data);
+      const vErrors = validateTblData(data);
+      const tv = document.getElementById('tbl-validation-msg');
+      if (vErrors.length > 0) {
+        tv.innerHTML = vErrors.map(e => '<span style="color:var(--warn)">' + esc(e) + '</span>').join('<br>');
+      } else {
+        tv.innerHTML = '<span style="color:var(--ok)">TBL format valid: printable ASCII, CR/LF endings, ' + getTblLineCount() + ' lines.</span>';
+      }
+    } else if (type.startsWith('dl')) {
+      const idx = parseInt(type.slice(2));
+      downloadFiles[idx] = data;
+      uploadedNames[type] = file.name;
+      showFileInfo(type, file.name, data);
     }
     updateUploadMatch();
     invalidateResult();
@@ -475,6 +679,7 @@ function handleFile(file, type) {
 
 function showFileInfo(type, name, data) {
   const el = document.getElementById('file-info-' + type);
+  if (!el) return;
   el.style.display = '';
   const hexSize = '0x' + data.length.toString(16).toUpperCase();
   const previewLen = Math.min(data.length, 64);
@@ -484,25 +689,12 @@ function showFileInfo(type, name, data) {
     ascStr += (data[i] >= 0x20 && data[i] <= 0x7E) ? String.fromCharCode(data[i]) : '.';
   }
   if (data.length > 64) { hexStr += '...'; ascStr += '...'; }
-  el.innerHTML = `<table>
-    <tr><td>Original filename:</td><td>${esc(name)}</td></tr>
-    <tr><td>Size:</td><td>${data.length} bytes (${hexSize})</td></tr>
-    <tr><td>Hex preview:</td><td style="font-family:monospace;font-size:0.78rem;word-break:break-all">${esc(hexStr)}</td></tr>
-    <tr><td>ASCII preview:</td><td style="font-family:monospace;font-size:0.78rem">${esc(ascStr)}</td></tr>
-  </table>`;
-}
-
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-function deriveNames(encName) {
-  if (!encName || !encName.toUpperCase().endsWith('.ENC')) return null;
-  const base = encName.slice(0, -4);
-  if (base.length === 0) return null;
-  for (let i = 0; i < base.length; i++) {
-    const c = base.charCodeAt(i);
-    if (c < 0x20 || c > 0x7E) return null;
-  }
-  return { tbl: base + '.TBL', bin: base + '_00.BIN' };
+  el.innerHTML = '<table>' +
+    '<tr><td>Original filename:</td><td>' + esc(name) + '</td></tr>' +
+    '<tr><td>Size:</td><td>' + data.length + ' bytes (' + hexSize + ')</td></tr>' +
+    '<tr><td>Hex preview:</td><td style="font-family:monospace;font-size:0.78rem;word-break:break-all">' + esc(hexStr) + '</td></tr>' +
+    '<tr><td>ASCII preview:</td><td style="font-family:monospace;font-size:0.78rem">' + esc(ascStr) + '</td></tr>' +
+    '</table>';
 }
 
 function onEncNameChange() {
@@ -513,8 +705,6 @@ function onEncNameChange() {
   if (!encName) {
     err.textContent = '';
     derivedEl.style.display = 'none';
-    document.getElementById('fname-tbl').value = '';
-    document.getElementById('fname-bin').value = '';
     invalidateResult();
     return;
   }
@@ -523,46 +713,57 @@ function onEncNameChange() {
   if (!names) {
     err.textContent = 'Must end with .ENC and contain only printable ASCII.';
     derivedEl.style.display = 'none';
-    document.getElementById('fname-tbl').value = '';
-    document.getElementById('fname-bin').value = '';
     invalidateResult();
     return;
   }
 
   err.textContent = '';
-  document.getElementById('fname-tbl').value = names.tbl;
-  document.getElementById('fname-bin').value = names.bin;
-  document.getElementById('fname-tbl-display').textContent = names.tbl;
-  document.getElementById('fname-bin-display').textContent = names.bin;
+  let listHtml = '<b>TBL:</b> ' + esc(names.tbl) + '<br>';
+  const max = getMaxDownloads();
+  const loadedIdxs = Object.keys(downloadFiles).map(Number).sort((a, b) => a - b);
+  for (let i = 0; i < max; i++) {
+    const key = 'dl' + i;
+    const loaded = downloadFiles[i] ? ' (loaded)' : '';
+    if (mode === 'example' && i > 0) continue;
+    listHtml += '<b>#' + i.toString().padStart(2, '0') + ':</b> ' + esc(names[key]) + loaded + '<br>';
+  }
+  document.getElementById('derived-names-list').innerHTML = listHtml;
   derivedEl.style.display = '';
   updateUploadMatch();
   invalidateResult();
 }
 
 function updateUploadMatch() {
-  const names = deriveNames(document.getElementById('fname-out').value.trim());
-  const tblMatch = document.getElementById('upload-match-tbl');
-  const binMatch = document.getElementById('upload-match-bin');
-  if (!tblMatch || !binMatch) return;
+  const encVal = document.getElementById('fname-out').value.trim();
+  const names = deriveNames(encVal);
 
-  if (uploadedNames.tbl) {
-    if (names && uploadedNames.tbl === names.tbl) {
-      tblMatch.innerHTML = '<span style="color:var(--ok)">Uploaded filename matches: ' + esc(uploadedNames.tbl) + '</span>';
-    } else if (names) {
-      tblMatch.innerHTML = '<span style="color:var(--err)">Mismatch: uploaded "' + esc(uploadedNames.tbl) + '", expected "' + esc(names.tbl) + '"</span>';
+  const tblMatch = document.getElementById('upload-match-tbl');
+  if (tblMatch) {
+    if (uploadedNames.tbl) {
+      if (names && uploadedNames.tbl === names.tbl) {
+        tblMatch.innerHTML = '<span style="color:var(--ok)">Filename matches: ' + esc(uploadedNames.tbl) + '</span>';
+      } else if (names) {
+        tblMatch.innerHTML = '<span style="color:var(--err)">Mismatch: uploaded "' + esc(uploadedNames.tbl) + '", expected "' + esc(names.tbl) + '"</span>';
+      }
+    } else {
+      tblMatch.textContent = names ? 'Expected: ' + names.tbl : '';
     }
-  } else {
-    tblMatch.textContent = names ? 'Expected: ' + names.tbl : '';
   }
 
-  if (uploadedNames.bin) {
-    if (names && uploadedNames.bin === names.bin) {
-      binMatch.innerHTML = '<span style="color:var(--ok)">Uploaded filename matches: ' + esc(uploadedNames.bin) + '</span>';
-    } else if (names) {
-      binMatch.innerHTML = '<span style="color:var(--err)">Mismatch: uploaded "' + esc(uploadedNames.bin) + '", expected "' + esc(names.bin) + '"</span>';
+  const max = getMaxDownloads();
+  for (let i = 0; i < max; i++) {
+    const key = 'dl' + i;
+    const el = document.getElementById('upload-match-' + key);
+    if (!el) continue;
+    if (uploadedNames[key]) {
+      if (names && uploadedNames[key] === names[key]) {
+        el.innerHTML = '<span style="color:var(--ok)">Filename matches: ' + esc(uploadedNames[key]) + '</span>';
+      } else if (names) {
+        el.innerHTML = '<span style="color:var(--err)">Mismatch: uploaded "' + esc(uploadedNames[key]) + '", expected "' + esc(names[key]) + '"</span>';
+      }
+    } else {
+      el.textContent = names ? 'Expected: ' + names[key] : '';
     }
-  } else {
-    binMatch.textContent = names ? 'Expected: ' + names.bin : '';
   }
 }
 
@@ -571,17 +772,17 @@ function parseObfInfo() {
   const bytes = parseHexBytes(text);
   const err = document.getElementById('obf-info-err');
   const detail = document.getElementById('obf-info-detail');
-  if (!bytes || bytes.length !== 16) {
-    err.textContent = 'Must be exactly 16 hex bytes.';
+  if (!bytes || bytes.length < 2) {
+    err.textContent = 'Minimum 2 bytes required. Byte[1] is the rotation count.';
     detail.textContent = '';
     return null;
   }
   err.textContent = '';
   const rotRaw = bytes[1];
   const rotEff = ((rotRaw % 8) + 8) % 8;
-  detail.innerHTML = `Byte[1] = 0x${hexByte(rotRaw)} = ${rotRaw} decimal. ` +
-    `Left-rotation count: ${rotRaw} mod 8 = ${rotEff}. ` +
-    `<br>The meanings of byte[0] (0x${hexByte(bytes[0])}) and bytes[2-15] are not defined by the supplied example. They are preserved exactly.`;
+  detail.innerHTML = 'Byte[1] = 0x' + hexByte(rotRaw) + ' = ' + rotRaw + ' decimal. ' +
+    'Left-rotation count: ' + rotRaw + ' mod 8 = ' + rotEff + '. ' +
+    '<br>' + bytes.length + ' bytes total. Length varies by annex definition (not verified by this tool).';
   return bytes;
 }
 
@@ -596,7 +797,7 @@ function parseLutText() {
   if (vErr) { err.textContent = vErr; lookupTable = null; return; }
   err.textContent = '';
   lookupTable = bytes;
-  info.textContent = `Valid permutation table loaded (${bytes.length} bytes).`;
+  info.textContent = 'Valid permutation table loaded (' + bytes.length + ' bytes).';
 }
 
 function loadLutFile(file) {
@@ -608,12 +809,12 @@ function loadLutFile(file) {
     const data = new Uint8Array(reader.result);
     const err = document.getElementById('lut-err');
     const info = document.getElementById('lut-info');
-    if (data.length !== 256) { err.textContent = `File is ${data.length} bytes; must be exactly 256.`; lookupTable = null; invalidateResult(); return; }
+    if (data.length !== 256) { err.textContent = 'File is ' + data.length + ' bytes; must be exactly 256.'; lookupTable = null; invalidateResult(); return; }
     const vErr = validatePermutation(data);
     if (vErr) { err.textContent = vErr; lookupTable = null; invalidateResult(); return; }
     err.textContent = '';
     lookupTable = data;
-    info.textContent = `Valid permutation table loaded from file (${data.length} bytes).`;
+    info.textContent = 'Valid permutation table loaded from file (' + data.length + ' bytes).';
     let hexStr = '';
     for (let i = 0; i < 256; i++) hexStr += hexByte(data[i]) + (i < 255 ? ' ' : '');
     document.getElementById('lut-text').value = hexStr;
@@ -628,48 +829,28 @@ function invalidateResult() {
   document.getElementById('btn-download').disabled = true;
   document.getElementById('gen-status').innerHTML = '';
   document.getElementById('verify-status').innerHTML = '';
+  document.getElementById('packing-info').innerHTML = '';
   document.getElementById('preview-content').style.display = 'none';
   document.getElementById('preview-placeholder').style.display = '';
 }
 
 function loadExample() {
   setMode('example');
+  comboType = 'TYPE2';
   tblData = new Uint8Array(EXAMPLE_TBL_DATA);
-  binData = new Uint8Array(EXAMPLE_BIN_DATA);
+  downloadFiles = { 0: new Uint8Array(EXAMPLE_BIN_DATA) };
+  uploadedNames.tbl = EXAMPLE_TBL_NAME;
+  uploadedNames.dl0 = EXAMPLE_BIN_NAME;
   lookupTable = makeDescendingTable();
   document.getElementById('fname-out').value = 'XXXXX-XXXXX_M0.ENC';
   onEncNameChange();
-  document.getElementById('id-tbl').value = '5A';
-  document.getElementById('id-bin').value = '57';
-  document.getElementById('hdr-reserved').value = '00000000000000';
   document.getElementById('obf-info').value = '02 0A 00 00 00 00 00 00 00 00 00 00 00 00 00 00';
-  document.getElementById('hdr-reserved-err').textContent = '';
   showFileInfo('tbl', EXAMPLE_TBL_NAME, tblData);
-  showFileInfo('bin', EXAMPLE_BIN_NAME, binData);
   parseObfInfo();
   document.getElementById('lut-info').textContent = 'Using descending table: FF FE FD ... 01 00';
   document.getElementById('lut-err').textContent = '';
   invalidateResult();
   generate();
-}
-
-function getReservedBytes() {
-  const v = document.getElementById('hdr-reserved').value.trim();
-  const err = document.getElementById('hdr-reserved-err');
-  if (!/^[0-9A-Fa-f]{14}$/.test(v)) {
-    err.textContent = 'Must be exactly 14 hex digits (7 bytes).';
-    return null;
-  }
-  err.textContent = '';
-  const bytes = new Uint8Array(7);
-  for (let i = 0; i < 7; i++) bytes[i] = parseInt(v.substr(i * 2, 2), 16);
-  return bytes;
-}
-
-function getFileId(type) {
-  const v = document.getElementById('id-' + type).value.trim();
-  if (!/^[0-9A-Fa-f]{1,2}$/.test(v)) return -1;
-  return parseInt(v, 16);
 }
 
 function generate() {
@@ -680,65 +861,125 @@ function generate() {
   if (!names) errors.push('Combination filename must end with .ENC and contain only printable ASCII.');
 
   if (!tblData) errors.push('No .TBL file loaded.');
-  if (!binData) errors.push('No .BIN file loaded.');
 
-  if (names) {
-    document.getElementById('fname-tbl').value = names.tbl;
-    document.getElementById('fname-bin').value = names.bin;
+  // Collect loaded download files in order
+  const loadedIdxs = Object.keys(downloadFiles).map(Number).sort((a, b) => a - b);
+  if (loadedIdxs.length === 0) errors.push('No download files loaded. At least download #0 is required.');
+
+  // Enforce packing order: must be contiguous from #0
+  if (loadedIdxs.length > 0 && loadedIdxs[0] !== 0) {
+    errors.push('Download #00 is required but not loaded.');
+  }
+  for (let i = 1; i < loadedIdxs.length; i++) {
+    if (loadedIdxs[i] !== loadedIdxs[i - 1] + 1) {
+      errors.push('Download files must be contiguous. #' + loadedIdxs[i].toString().padStart(2, '0') + ' is loaded but #' + (loadedIdxs[i - 1] + 1).toString().padStart(2, '0') + ' is missing.');
+    }
   }
 
-  const tblId = getFileId('tbl');
-  const binId = getFileId('bin');
-  if (tblId < 0) errors.push('Invalid TBL file ID (need 1-2 hex digits).');
-  if (binId < 0) errors.push('Invalid BIN file ID (need 1-2 hex digits).');
+  // Check file sizes
+  if (tblData && tblData.length > MAX_FILE_SIZE) {
+    errors.push('TBL file exceeds maximum size (4,294,967,295 bytes).');
+  }
+  for (const idx of loadedIdxs) {
+    if (downloadFiles[idx].length > MAX_FILE_SIZE) {
+      errors.push('Download #' + idx.toString().padStart(2, '0') + ' exceeds maximum size (4,294,967,295 bytes).');
+    }
+  }
 
-  const reserved = getReservedBytes();
-  if (!reserved) errors.push('Invalid reserved header bytes.');
+  // In custom mode: enforce filename matching
+  if (mode === 'custom' && names) {
+    if (uploadedNames.tbl && uploadedNames.tbl !== names.tbl) {
+      errors.push('TBL filename mismatch: uploaded "' + uploadedNames.tbl + '", expected "' + names.tbl + '".');
+    }
+    for (const idx of loadedIdxs) {
+      const key = 'dl' + idx;
+      if (uploadedNames[key] && uploadedNames[key] !== names[key]) {
+        errors.push('Download #' + idx.toString().padStart(2, '0') + ' filename mismatch: uploaded "' + uploadedNames[key] + '", expected "' + names[key] + '".');
+      }
+    }
+  }
 
   const obfInfo = parseObfInfo();
-  if (!obfInfo) errors.push('Invalid obfuscation information.');
+  if (!obfInfo) errors.push('Invalid obfuscation information (minimum 2 bytes).');
 
   if (!lookupTable) errors.push('No valid lookup table.');
 
   if (errors.length) {
-    document.getElementById('gen-status').innerHTML = `<div class="status fail">${errors.map(esc).join('<br>')}</div>`;
+    document.getElementById('gen-status').innerHTML = '<div class="status fail">' + errors.map(esc).join('<br>') + '</div>';
     return;
   }
 
-  const tblFnameBytes = strToAsciiBytes(document.getElementById('fname-tbl').value);
-  const binFnameBytes = strToAsciiBytes(document.getElementById('fname-bin').value);
-
-  const tblHeader = buildHeader(tblId, reserved, tblFnameBytes.length, tblData.length);
-  const binHeader = buildHeader(binId, reserved, binFnameBytes.length, binData.length);
-
+  // Build blocks: TBL first, then downloads in ascending order
+  const tblFname = mode === 'example' ? EXAMPLE_TBL_NAME : names.tbl;
+  const tblFnameBytes = strToAsciiBytes(tblFname);
+  const tblId = getFileId('tbl');
+  const tblHeader = buildHeader(tblId, tblFnameBytes.length, tblData.length);
   const tblBlock = concat(tblHeader, tblFnameBytes, tblData);
-  const binBlock = concat(binHeader, binFnameBytes, binData);
-  const combined = concat(tblBlock, binBlock);
 
+  const blockInfos = [];
+  blockInfos.push({
+    label: 'TBL',
+    fileId: tblId,
+    fname: tblFname,
+    fnameBytes: tblFnameBytes,
+    header: tblHeader,
+    block: tblBlock,
+    data: tblData,
+    dataLen: tblData.length,
+    fnLen: tblFnameBytes.length
+  });
+
+  for (const idx of loadedIdxs) {
+    const key = 'dl' + idx;
+    const dlFname = mode === 'example' ? EXAMPLE_BIN_NAME : names[key];
+    const dlFnameBytes = strToAsciiBytes(dlFname);
+    const dlId = getFileId(idx);
+    const dlHeader = buildHeader(dlId, dlFnameBytes.length, downloadFiles[idx].length);
+    const dlBlock = concat(dlHeader, dlFnameBytes, downloadFiles[idx]);
+    blockInfos.push({
+      label: '#' + idx.toString().padStart(2, '0'),
+      fileId: dlId,
+      fname: dlFname,
+      fnameBytes: dlFnameBytes,
+      header: dlHeader,
+      block: dlBlock,
+      data: downloadFiles[idx],
+      dataLen: downloadFiles[idx].length,
+      fnLen: dlFnameBytes.length
+    });
+  }
+
+  const combined = concat(...blockInfos.map(b => b.block));
   const rotCount = obfInfo[1];
   const inverseTable = buildInverse(lookupTable);
   const obfuscated = obfuscateData(combined, inverseTable, rotCount);
   const finalOutput = concat(obfuscated, obfInfo);
 
-  const tblHeaderFn = concat(tblHeader, tblFnameBytes);
-  const binHeaderFn = concat(binHeader, binFnameBytes);
-
   generatedResult = {
-    tblHeader, binHeader, tblFnameBytes, binFnameBytes,
-    tblHeaderFn, binHeaderFn,
-    tblBlock, binBlock, combined, obfuscated, finalOutput,
-    obfInfo, rotCount, inverseTable,
-    tblId, binId,
-    tblFnLen: tblFnameBytes.length, binFnLen: binFnameBytes.length,
-    tblDataLen: tblData.length, binDataLen: binData.length
+    blockInfos, combined, obfuscated, finalOutput,
+    obfInfo, rotCount, inverseTable, loadedIdxs
   };
   resultValid = true;
 
-  const outName = document.getElementById('fname-out').value || 'output.ENC';
-  let statusHtml = `<div class="status info">Generated: <b>${esc(outName)}</b> &mdash; ${finalOutput.length} bytes (0x${finalOutput.length.toString(16).toUpperCase()})`;
-  statusHtml += `<br>TBL block: ${tblBlock.length} bytes | BIN block: ${binBlock.length} bytes | Combined: ${combined.length} bytes`;
-  statusHtml += `<br>Obfuscation info appended at offset 0x${combined.length.toString(16).toUpperCase()}</div>`;
+  const outName = encName || 'output.ENC';
+  let statusHtml = '<div class="status info">Generated: <b>' + esc(outName) + '</b> &mdash; ' + finalOutput.length + ' bytes (0x' + finalOutput.length.toString(16).toUpperCase() + ')';
+  statusHtml += '<br>' + blockInfos.length + ' block(s): ';
+  statusHtml += blockInfos.map(b => b.label + '=' + b.block.length + 'B').join(' + ');
+  statusHtml += ' = ' + combined.length + ' bytes combined';
+  statusHtml += '<br>Obfuscation info (' + obfInfo.length + ' bytes) appended at offset 0x' + combined.length.toString(16).toUpperCase() + '</div>';
   document.getElementById('gen-status').innerHTML = statusHtml;
+
+  // Packing table
+  let packHtml = '<table class="packing-table"><tr><th>Order</th><th>Block</th><th>File ID</th><th>Offset</th><th>Size</th><th>Filename</th></tr>';
+  let runOff = 0;
+  for (let i = 0; i < blockInfos.length; i++) {
+    const b = blockInfos[i];
+    packHtml += '<tr><td>' + (i + 1) + '</td><td>' + esc(b.label) + '</td><td>0x' + hexByte(b.fileId) + '</td><td>0x' + runOff.toString(16).toUpperCase().padStart(4, '0') + '</td><td>' + b.block.length + '</td><td>' + esc(b.fname) + '</td></tr>';
+    runOff += b.block.length;
+  }
+  packHtml += '<tr style="font-weight:600"><td></td><td>Obf. Info</td><td></td><td>0x' + runOff.toString(16).toUpperCase().padStart(4, '0') + '</td><td>' + obfInfo.length + '</td><td></td></tr>';
+  packHtml += '</table>';
+  document.getElementById('packing-info').innerHTML = packHtml;
 
   // Verification
   if (mode === 'example') {
@@ -771,42 +1012,55 @@ function renderPreview() {
   document.getElementById('preview-placeholder').style.display = 'none';
 
   const r = generatedResult;
-  const fnLenHex = '$' + r.tblFnLen.toString(16).toUpperCase().padStart(8,'0');
-  const dlLenHex = '$' + r.tblDataLen.toString(16).toUpperCase().padStart(8,'0');
-  const bfnLenHex = '$' + r.binFnLen.toString(16).toUpperCase().padStart(8,'0');
-  const bdlLenHex = '$' + r.binDataLen.toString(16).toUpperCase().padStart(8,'0');
   const rotEff = ((r.rotCount % 8) + 8) % 8;
 
-  const tabDefs = [
-    { id: 'step1-tbl', label: 'STEP1: TBL Hdr',
-      desc: `Prepare the header of the additional information file.<br>File ID=$${hexByte(r.tblId)}, file name length=${fnLenHex} (${r.tblFnLen} characters), data length=${dlLenHex} (${r.tblDataLen} bytes).`,
-      data: r.tblHeaderFn,
-      regions: makeStep1Regions(r.tblFnLen) },
-    { id: 'step1-bin', label: 'STEP1: BIN Hdr',
-      desc: `Prepare the header of the download file #0.<br>File ID=$${hexByte(r.binId)}, file name length=${bfnLenHex} (${r.binFnLen} characters), data length=${bdlLenHex} (${r.binDataLen} bytes).`,
-      data: r.binHeaderFn,
-      regions: makeStep1Regions(r.binFnLen) },
-    { id: 'step2-tbl', label: 'STEP2: TBL Block',
-      desc: 'Add the header to the additional information file. The output is as follows.',
-      data: r.tblBlock,
-      regions: makeBlockRegions(r.tblFnLen, r.tblDataLen) },
-    { id: 'step2-bin', label: 'STEP2: BIN Block',
-      desc: 'Add the header to the download file #0. The output is as follows.',
-      data: r.binBlock,
-      regions: makeBlockRegions(r.binFnLen, r.binDataLen) },
-    { id: 'step3', label: 'STEP3: Combined',
-      desc: 'Combine the additional information file with the header and the download file #0 with header. The output is as follows.',
-      data: r.combined,
-      regions: makeCombinedRegions(r) },
-    { id: 'step4', label: 'STEP4: Obfuscated',
-      desc: `Obfuscate the output by STEP3. Using the 2nd byte of the obfuscated information, roll left ${r.rotCount} times ($${hexByte(r.rotCount)}, effective ${rotEff}), then search the random number table for the address where the rotated value is contained. The index is the obfuscation value.`,
-      data: r.obfuscated,
-      regions: [{s:0,e:r.obfuscated.length,c:'hx-obf'}] },
-    { id: 'step5', label: 'STEP5: Final',
-      desc: 'Add the obfuscated information to the output by STEP4. The output is as follows.',
-      data: r.finalOutput,
-      regions: [{s:0,e:r.obfuscated.length,c:'hx-obf'},{s:r.obfuscated.length,e:r.finalOutput.length,c:'hx-inf'}] },
-  ];
+  const tabDefs = [];
+
+  // STEP1/STEP2 for each block
+  for (let i = 0; i < r.blockInfos.length; i++) {
+    const b = r.blockInfos[i];
+    const headerFn = concat(b.header, b.fnameBytes);
+    const fnLenHex = '$' + b.fnLen.toString(16).toUpperCase().padStart(8, '0');
+    const dlLenHex = '$' + b.dataLen.toString(16).toUpperCase().padStart(8, '0');
+
+    tabDefs.push({
+      id: 'step1-' + i, label: 'S1: ' + b.label + ' Hdr',
+      desc: 'Prepare header for ' + esc(b.label) + '.<br>File ID=0x' + hexByte(b.fileId) + ', filename length=' + fnLenHex + ' (' + b.fnLen + '), data length=' + dlLenHex + ' (' + b.dataLen + ').',
+      data: headerFn,
+      regions: makeStep1Regions(b.fnLen)
+    });
+
+    tabDefs.push({
+      id: 'step2-' + i, label: 'S2: ' + b.label + ' Block',
+      desc: 'Complete block for ' + esc(b.label) + ': header + filename + data.',
+      data: b.block,
+      regions: makeBlockRegions(b.fnLen, b.dataLen)
+    });
+  }
+
+  // STEP3: Combined
+  tabDefs.push({
+    id: 'step3', label: 'S3: Combined',
+    desc: 'All blocks packed: TBL first, then download files in ascending order. Total ' + r.combined.length + ' bytes.',
+    data: r.combined,
+    regions: makeCombinedRegions(r)
+  });
+
+  // STEP4: Obfuscated
+  tabDefs.push({
+    id: 'step4', label: 'S4: Obfuscated',
+    desc: 'Obfuscate STEP3 output. Rotation count = ' + r.rotCount + ' (0x' + hexByte(r.rotCount) + ', effective ' + rotEff + '). For each byte: rotate left, then inverse-lookup in permutation table.',
+    data: r.obfuscated,
+    regions: [{s:0,e:r.obfuscated.length,c:'hx-obf'}]
+  });
+
+  // STEP5: Final
+  tabDefs.push({
+    id: 'step5', label: 'S5: Final',
+    desc: 'Append obfuscation info (' + r.obfInfo.length + ' bytes) unchanged to STEP4 output.',
+    data: r.finalOutput,
+    regions: [{s:0,e:r.obfuscated.length,c:'hx-obf'},{s:r.obfuscated.length,e:r.finalOutput.length,c:'hx-inf'}]
+  });
 
   previewPages = {};
   for (const t of tabDefs) previewPages[t.id] = { data: t.data, regions: t.regions, page: 0, desc: t.desc };
@@ -842,18 +1096,18 @@ function makeBlockRegions(fnLen, dataLen) {
 }
 
 function makeCombinedRegions(r) {
-  const tblFn = r.tblFnLen, tblD = r.tblDataLen, binFn = r.binFnLen, binD = r.binDataLen;
-  const o1 = 0;
-  const tblBlkEnd = 16 + tblFn + tblD;
-  const o2 = tblBlkEnd;
-  return [
-    {s:o1,e:o1+1,c:'hx-id'},{s:o1+1,e:o1+8,c:'hx-rsv'},
-    {s:o1+8,e:o1+12,c:'hx-fnl'},{s:o1+12,e:o1+16,c:'hx-dl'},
-    {s:o1+16,e:o1+16+tblFn,c:'hx-fn'},{s:o1+16+tblFn,e:tblBlkEnd,c:'hx-dat'},
-    {s:o2,e:o2+1,c:'hx-id'},{s:o2+1,e:o2+8,c:'hx-rsv'},
-    {s:o2+8,e:o2+12,c:'hx-fnl'},{s:o2+12,e:o2+16,c:'hx-dl'},
-    {s:o2+16,e:o2+16+binFn,c:'hx-fn'},{s:o2+16+binFn,e:o2+16+binFn+binD,c:'hx-dat'}
-  ];
+  const regions = [];
+  let off = 0;
+  for (const b of r.blockInfos) {
+    regions.push({s:off,e:off+1,c:'hx-id'});
+    regions.push({s:off+1,e:off+8,c:'hx-rsv'});
+    regions.push({s:off+8,e:off+12,c:'hx-fnl'});
+    regions.push({s:off+12,e:off+16,c:'hx-dl'});
+    regions.push({s:off+16,e:off+16+b.fnLen,c:'hx-fn'});
+    regions.push({s:off+16+b.fnLen,e:off+16+b.fnLen+b.dataLen,c:'hx-dat'});
+    off += b.block.length;
+  }
+  return regions;
 }
 
 function getRegionClass(regions, idx) {
@@ -881,7 +1135,7 @@ function renderHexPane(id) {
   const endRow = Math.min(startRow + ROWS_PER_PAGE, totalRows);
 
   let html = '';
-  if (info.desc) html += `<div class="step-desc">${info.desc}</div>`;
+  if (info.desc) html += '<div class="step-desc">' + info.desc + '</div>';
   html += '<div class="hex-view">';
   for (let row = startRow; row < endRow; row++) {
     const off = row * 16;
@@ -891,28 +1145,27 @@ function renderHexPane(id) {
       if (idx < data.length) {
         const cls = getRegionClass(regions, idx);
         const hx = hexByte(data[idx]);
-        hexPart += cls ? `<span class="${cls}">${hx}</span>` : hx;
+        hexPart += cls ? '<span class="' + cls + '">' + hx + '</span>' : hx;
         hexPart += col < 15 ? ' ' : '';
         const ch = (data[idx] >= 0x20 && data[idx] <= 0x7E) ? String.fromCharCode(data[idx]) : '.';
-        ascPart += cls ? `<span class="${cls}">${esc(ch)}</span>` : esc(ch);
+        ascPart += cls ? '<span class="' + cls + '">' + esc(ch) + '</span>' : esc(ch);
       } else {
         hexPart += '   ';
         ascPart += ' ';
       }
     }
-    html += `<span class="off">${hexOffset(off)}:</span> ${hexPart} <span class="sep">|</span><span class="ascii">${ascPart}</span>\n`;
+    html += '<span class="off">' + hexOffset(off) + ':</span> ' + hexPart + ' <span class="sep">|</span><span class="ascii">' + ascPart + '</span>\n';
   }
   html += '</div>';
 
   if (totalPages > 1) {
-    html += `<div class="pag">
-      <button class="btn btn-outline" onclick="prevPage('${id}')" ${page === 0 ? 'disabled' : ''}>Prev</button>
-      Page ${page + 1} / ${totalPages}
-      <button class="btn btn-outline" onclick="nextPage('${id}')" ${page >= totalPages - 1 ? 'disabled' : ''}>Next</button>
-      <span class="help">(${data.length} bytes total)</span>
-    </div>`;
+    html += '<div class="pag">' +
+      '<button class="btn btn-outline" onclick="prevPage(\'' + id + '\')" ' + (page === 0 ? 'disabled' : '') + '>Prev</button> ' +
+      'Page ' + (page + 1) + ' / ' + totalPages +
+      ' <button class="btn btn-outline" onclick="nextPage(\'' + id + '\')" ' + (page >= totalPages - 1 ? 'disabled' : '') + '>Next</button>' +
+      ' <span class="help">(' + data.length + ' bytes total)</span></div>';
   } else {
-    html += `<div class="help" style="margin-top:4px">${data.length} bytes</div>`;
+    html += '<div class="help" style="margin-top:4px">' + data.length + ' bytes</div>';
   }
 
   document.getElementById('preview-pane').innerHTML = html;
@@ -926,7 +1179,7 @@ function traceByte() {
   const r = generatedResult;
   if (!r) { document.getElementById('trace-result').innerHTML = ''; document.getElementById('trace-range').textContent = ''; return; }
 
-  document.getElementById('trace-range').textContent = `Valid range: 0x0000 - 0x${hexOffset(r.combined.length - 1)}`;
+  document.getElementById('trace-range').textContent = 'Valid range: 0x0000 - 0x' + hexOffset(r.combined.length - 1);
 
   const offStr = document.getElementById('trace-offset').value.trim();
   if (!offStr) { document.getElementById('trace-result').innerHTML = ''; return; }
@@ -942,7 +1195,6 @@ function traceByte() {
   const rotated = rotateLeft8(origByte, rotRaw);
   const result = r.inverseTable[rotated];
 
-  // Find row/col in lookup table
   let lutRow = -1, lutCol = -1;
   for (let i = 0; i < 256; i++) {
     if (lookupTable[i] === rotated) {
@@ -956,12 +1208,12 @@ function traceByte() {
   const rotBin = rotated.toString(2).padStart(8, '0');
 
   let html = '<div class="trace-box">';
-  html += `<div class="step">Offset: <span class="val">0x${hexOffset(off)}</span></div>`;
-  html += `<div class="step">Original byte: <span class="val">${hexByte(origByte)}</span> (binary: ${origBin})</div>`;
-  html += `<div class="step">Rotation count: <span class="val">${rotRaw}</span> (effective: ${rotEff}, i.e. ${rotRaw} mod 8 = ${rotEff})</div>`;
-  html += `<div class="step">Rotated byte: <span class="val">${hexByte(rotated)}</span> (binary: ${rotBin})</div>`;
-  html += `<div class="step">Lookup: search table for value ${hexByte(rotated)} &rarr; found at row $${lutRow.toString(16).toUpperCase()}, col $${lutCol.toString(16).toUpperCase()}, index <span class="val">${lutRow * 16 + lutCol}</span> (0x${hexByte(lutRow * 16 + lutCol)})</div>`;
-  html += `<div class="step">Result: <span class="val">${hexByte(origByte)}</span> &rarr; rotate left ${rotRaw} &rarr; <span class="val">${hexByte(rotated)}</span> &rarr; table index ${lutRow * 16 + lutCol} &rarr; output <span class="val">${hexByte(result)}</span></div>`;
+  html += '<div class="step">Offset: <span class="val">0x' + hexOffset(off) + '</span></div>';
+  html += '<div class="step">Original byte: <span class="val">' + hexByte(origByte) + '</span> (binary: ' + origBin + ')</div>';
+  html += '<div class="step">Rotation count: <span class="val">' + rotRaw + '</span> (effective: ' + rotEff + ', i.e. ' + rotRaw + ' mod 8 = ' + rotEff + ')</div>';
+  html += '<div class="step">Rotated byte: <span class="val">' + hexByte(rotated) + '</span> (binary: ' + rotBin + ')</div>';
+  html += '<div class="step">Lookup: search table for value ' + hexByte(rotated) + ' &rarr; found at row $' + lutRow.toString(16).toUpperCase() + ', col $' + lutCol.toString(16).toUpperCase() + ', index <span class="val">' + (lutRow * 16 + lutCol) + '</span> (0x' + hexByte(lutRow * 16 + lutCol) + ')</div>';
+  html += '<div class="step">Result: <span class="val">' + hexByte(origByte) + '</span> &rarr; rotate left ' + rotRaw + ' &rarr; <span class="val">' + hexByte(rotated) + '</span> &rarr; table index ' + (lutRow * 16 + lutCol) + ' &rarr; output <span class="val">' + hexByte(result) + '</span></div>';
   html += '</div>';
   document.getElementById('trace-result').innerHTML = html;
 }
@@ -982,20 +1234,19 @@ function downloadEnc() {
 }
 
 function resetAll() {
-  tblData = null; binData = null;
+  tblData = null;
+  downloadFiles = {};
   lookupTable = mode === 'example' ? makeDescendingTable() : null;
-  uploadedNames = { tbl: '', bin: '' };
-  document.getElementById('fname-tbl').value = '';
-  document.getElementById('fname-bin').value = '';
+  uploadedNames = { tbl: '' };
+  for (let i = 0; i <= 17; i++) uploadedNames['dl' + i] = '';
   document.getElementById('fname-out').value = '';
   document.getElementById('fname-out-err').textContent = '';
   document.getElementById('derived-names').style.display = 'none';
   document.getElementById('file-info-tbl').style.display = 'none';
-  document.getElementById('file-info-bin').style.display = 'none';
   const umTbl = document.getElementById('upload-match-tbl');
-  const umBin = document.getElementById('upload-match-bin');
   if (umTbl) umTbl.textContent = '';
-  if (umBin) umBin.textContent = '';
+  const tv = document.getElementById('tbl-validation-msg');
+  if (tv) tv.textContent = '';
   document.getElementById('trace-offset').value = '';
   document.getElementById('trace-result').innerHTML = '';
   document.getElementById('trace-range').textContent = '';
@@ -1003,8 +1254,236 @@ function resetAll() {
     document.getElementById('lut-text').value = '';
     document.getElementById('lut-info').textContent = '';
     document.getElementById('lut-err').textContent = '';
+    renderDownloadSlots();
   }
   invalidateResult();
+}
+
+// --- Validation Coverage Panel ---
+function renderCoverage() {
+  const items = [
+    { label: 'Section 4.1: Header format (16 bytes, File ID + reserved + lengths)', status: 'done', note: 'Implemented. File IDs auto-calculated, reserved bytes fixed to zero.' },
+    { label: 'Section 4.2: Filename derivation from .ENC name', status: 'done', note: 'Implemented. Decimal _XX numbering for downloads. Mismatch blocks generation in custom mode.' },
+    { label: 'Section 4.2: TYPE2/TYPE3 download count limits', status: 'done', note: 'TYPE2: #0-#9. TYPE3: #0-#17. Selection UI with CAN UDS decision guide.' },
+    { label: 'Section 4.2: Packing order (TBL first, downloads ascending)', status: 'done', note: 'Enforced. Contiguous from #0 required.' },
+    { label: 'Section 4.3: Bytewise left-rotation + inverse lookup obfuscation', status: 'done', note: 'Verified with non-symmetric self-test and 119-byte example.' },
+    { label: 'Section 4.3: Obfuscation info appended unchanged', status: 'done', note: 'Raw bytes imported; minimum 2 bytes enforced. Length not verified (annex-dependent).' },
+    { label: 'Section 4.3: 256-byte permutation table validation', status: 'done', note: 'All 256 values present exactly once.' },
+    { label: 'TBL format: printable ASCII (0x20-0x7E) + CR/LF', status: 'done', note: 'Bare CR and bare LF rejected. Line count checked (TYPE2=100, TYPE3=300).' },
+    { label: 'File size limit: reject files >= 4 GiB', status: 'done', note: 'Data length field is 4-byte big-endian; files >= 2^32 bytes rejected on upload and generation.' },
+    { label: 'Section 4.3: CRC-32 (IEEE 802.3)', status: 'missing', note: 'Specified in Section 4.3 but representation/coverage not established. Not implemented.' },
+    { label: 'Section 5: Content validation rules', status: 'missing', note: 'Depends on Section 5 definitions. Not available.' },
+    { label: 'Annex: Obfuscation info length and field definitions', status: 'missing', note: 'Length varies by annex. Current tool imports raw bytes without structure validation.' },
+    { label: 'Larger-file format (ID=0x77-n, 20-byte header)', status: 'na', note: 'Not implemented by design. Files >= 4 GiB are rejected.' }
+  ];
+
+  let html = '';
+  for (const item of items) {
+    const dotClass = item.status === 'done' ? 'cov-done' : item.status === 'partial' ? 'cov-partial' : item.status === 'missing' ? 'cov-missing' : 'cov-na';
+    const statusLabel = item.status === 'done' ? 'Implemented' : item.status === 'partial' ? 'Partial' : item.status === 'missing' ? 'Not available' : 'N/A';
+    html += '<div class="cov-row"><span class="cov-dot ' + dotClass + '"></span><span><b>' + esc(item.label) + '</b> &mdash; ' + statusLabel + '. ' + esc(item.note) + '</span></div>';
+  }
+  document.getElementById('coverage-panel').innerHTML = html;
+}
+
+// --- Comprehensive Test Suite ---
+function runTests() {
+  const results = [];
+  let pass = 0, fail = 0;
+
+  function assert(name, condition, detail) {
+    if (condition) {
+      results.push({ name, pass: true });
+      pass++;
+    } else {
+      results.push({ name, pass: false, detail });
+      fail++;
+    }
+  }
+
+  // Test 1: rotateLeft8
+  assert('rotateLeft8(0x05, 2) = 0x14', rotateLeft8(0x05, 2) === 0x14, 'Got: 0x' + hexByte(rotateLeft8(0x05, 2)));
+  assert('rotateLeft8(0x80, 1) = 0x01', rotateLeft8(0x80, 1) === 0x01, 'Got: 0x' + hexByte(rotateLeft8(0x80, 1)));
+  assert('rotateLeft8(0xFF, 4) = 0xFF', rotateLeft8(0xFF, 4) === 0xFF, 'Got: 0x' + hexByte(rotateLeft8(0xFF, 4)));
+  assert('rotateLeft8(0x01, 0) = 0x01', rotateLeft8(0x01, 0) === 0x01, 'Got: 0x' + hexByte(rotateLeft8(0x01, 0)));
+  assert('rotateLeft8(0x01, 8) = 0x01', rotateLeft8(0x01, 8) === 0x01, 'Got: 0x' + hexByte(rotateLeft8(0x01, 8)));
+  assert('rotateLeft8(0xA5, 3) = 0x2D', rotateLeft8(0xA5, 3) === 0x2D, 'Got: 0x' + hexByte(rotateLeft8(0xA5, 3)));
+
+  // Test 2: buildInverse
+  const descTable = makeDescendingTable();
+  const descInv = buildInverse(descTable);
+  assert('Inverse of descending table: inv[0]=0xFF', descInv[0] === 0xFF, 'Got: 0x' + hexByte(descInv[0]));
+  assert('Inverse of descending table: inv[0xFF]=0x00', descInv[0xFF] === 0x00, 'Got: 0x' + hexByte(descInv[0xFF]));
+  const shiftTable = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) shiftTable[i] = (i + 1) % 256;
+  const shiftInv = buildInverse(shiftTable);
+  assert('Inverse of shift-by-1: inv[0]=0xFF', shiftInv[0] === 0xFF, 'Got: 0x' + hexByte(shiftInv[0]));
+  assert('Inverse of shift-by-1: inv[1]=0x00', shiftInv[1] === 0x00, 'Got: 0x' + hexByte(shiftInv[1]));
+
+  // Test 3: buildInverse is true inverse
+  for (let i = 0; i < 256; i++) {
+    if (descInv[descTable[i]] !== i) {
+      assert('Descending table round-trip at index ' + i, false, 'inv[table[' + i + ']] = ' + descInv[descTable[i]]);
+      break;
+    }
+    if (i === 255) assert('Descending table round-trip all 256 values', true);
+  }
+
+  // Test 4: obfuscateData uses inverse (non-symmetric test)
+  const nsTable = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) nsTable[i] = (i + 1) % 256;
+  const nsInv = buildInverse(nsTable);
+  const testByte = 0x05;
+  const rotated = rotateLeft8(testByte, 2);
+  const obfResult = obfuscateData(new Uint8Array([testByte]), nsInv, 2);
+  assert('Non-symmetric obfuscation: uses inverse not direct', obfResult[0] === nsInv[rotated] && obfResult[0] !== nsTable[rotated],
+    'obf=' + hexByte(obfResult[0]) + ', inv=' + hexByte(nsInv[rotated]) + ', direct=' + hexByte(nsTable[rotated]));
+
+  // Test 5: File ID calculation
+  assert('TBL File ID = 0x5A', getFileId('tbl') === 0x5A, 'Got: 0x' + hexByte(getFileId('tbl')));
+  assert('Download #0 File ID = 0x57', getFileId(0) === 0x57, 'Got: 0x' + hexByte(getFileId(0)));
+  assert('Download #1 File ID = 0x56', getFileId(1) === 0x56, 'Got: 0x' + hexByte(getFileId(1)));
+  assert('Download #9 File ID = 0x4E', getFileId(9) === 0x4E, 'Got: 0x' + hexByte(getFileId(9)));
+  assert('Download #10 File ID = 0x4D', getFileId(10) === 0x4D, 'Got: 0x' + hexByte(getFileId(10)));
+  assert('Download #17 File ID = 0x46', getFileId(17) === 0x46, 'Got: 0x' + hexByte(getFileId(17)));
+
+  // Test 6: buildHeader
+  const h = buildHeader(0x5A, 19, 16);
+  assert('Header byte[0] = File ID', h[0] === 0x5A, 'Got: 0x' + hexByte(h[0]));
+  assert('Header bytes[1-7] = zero', h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0 && h[6] === 0 && h[7] === 0);
+  assert('Header bytes[8-11] = filename length (big-endian)', h[8] === 0 && h[9] === 0 && h[10] === 0 && h[11] === 19, 'Got: ' + hexByte(h[8]) + hexByte(h[9]) + hexByte(h[10]) + hexByte(h[11]));
+  assert('Header bytes[12-15] = data length (big-endian)', h[12] === 0 && h[13] === 0 && h[14] === 0 && h[15] === 16, 'Got: ' + hexByte(h[12]) + hexByte(h[13]) + hexByte(h[14]) + hexByte(h[15]));
+  assert('Header is 16 bytes', h.length === 16, 'Got: ' + h.length);
+
+  // Test 7: Name derivation
+  const n1 = deriveNames('TEST.ENC');
+  assert('deriveNames("TEST.ENC") TBL', n1 && n1.tbl === 'TEST.TBL', n1 ? n1.tbl : 'null');
+  assert('deriveNames("TEST.ENC") DL#0', n1 && n1.dl0 === 'TEST_00.BIN', n1 ? n1.dl0 : 'null');
+  assert('deriveNames("TEST.ENC") DL#9', n1 && n1.dl9 === 'TEST_09.BIN', n1 ? n1.dl9 : 'null');
+  assert('deriveNames("") returns null', deriveNames('') === null);
+  assert('deriveNames("TEST.TXT") returns null', deriveNames('TEST.TXT') === null);
+
+  // Test 8: Decimal numbering (not hex)
+  const n2 = deriveNames('BASE.ENC');
+  assert('DL#10 uses decimal: BASE_10.BIN', n2 && n2.dl10 === 'BASE_10.BIN', n2 ? n2.dl10 : 'null');
+  assert('DL#15 uses decimal: BASE_15.BIN', n2 && n2.dl15 === 'BASE_15.BIN', n2 ? n2.dl15 : 'null');
+
+  // Test 9: validatePermutation
+  const goodTable = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) goodTable[i] = i;
+  assert('Identity table is valid permutation', validatePermutation(goodTable) === null);
+  const shortTable = new Uint8Array(255);
+  assert('255-byte table is rejected', validatePermutation(shortTable) !== null);
+  const dupTable = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) dupTable[i] = 0;
+  assert('All-zeros table is rejected', validatePermutation(dupTable) !== null);
+
+  // Test 10: TBL validation
+  const goodTbl = new Uint8Array([0x41, 0x42, 0x0D, 0x0A]);
+  const savedType = comboType;
+  comboType = 'TYPE2';
+  const tblErrs1 = validateTblData(goodTbl);
+  assert('TBL "AB\\r\\n" has 1 line', tblErrs1.some(e => e.indexOf('Line count: 1') >= 0), tblErrs1.join('; '));
+  const bareLf = new Uint8Array([0x41, 0x0A]);
+  const tblErrs2 = validateTblData(bareLf);
+  assert('Bare LF rejected', tblErrs2.some(e => e.indexOf('Bare LF') >= 0), tblErrs2.join('; '));
+  const bareCr = new Uint8Array([0x41, 0x0D, 0x42]);
+  const tblErrs3 = validateTblData(bareCr);
+  assert('Bare CR rejected', tblErrs3.some(e => e.indexOf('Bare CR') >= 0), tblErrs3.join('; '));
+  const nonPrint = new Uint8Array([0x01, 0x0D, 0x0A]);
+  const tblErrs4 = validateTblData(nonPrint);
+  assert('Non-printable byte rejected', tblErrs4.some(e => e.indexOf('Non-printable') >= 0), tblErrs4.join('; '));
+  comboType = savedType;
+
+  // Test 11: 119-byte example verification
+  const exTbl = new Uint8Array(EXAMPLE_TBL_DATA);
+  const exBin = new Uint8Array(EXAMPLE_BIN_DATA);
+  const exLut = makeDescendingTable();
+  const exInv = buildInverse(exLut);
+  const exObfInfo = new Uint8Array([0x02,0x0A,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]);
+  const exTblFn = strToAsciiBytes(EXAMPLE_TBL_NAME);
+  const exBinFn = strToAsciiBytes(EXAMPLE_BIN_NAME);
+  const exTblHdr = buildHeader(0x5A, exTblFn.length, exTbl.length);
+  const exBinHdr = buildHeader(0x57, exBinFn.length, exBin.length);
+  const exTblBlock = concat(exTblHdr, exTblFn, exTbl);
+  const exBinBlock = concat(exBinHdr, exBinFn, exBin);
+  const exCombined = concat(exTblBlock, exBinBlock);
+  const exObf = obfuscateData(exCombined, exInv, 10);
+  const exFinal = concat(exObf, exObfInfo);
+  let exMatch = exFinal.length === EXPECTED_OUTPUT.length;
+  if (exMatch) {
+    for (let i = 0; i < exFinal.length; i++) {
+      if (exFinal[i] !== EXPECTED_OUTPUT[i]) { exMatch = false; break; }
+    }
+  }
+  assert('Example output matches all 119 bytes', exMatch, 'Length: ' + exFinal.length + ' vs ' + EXPECTED_OUTPUT.length);
+
+  // Test 12: First byte trace
+  const firstRotated = rotateLeft8(0x5A, 10);
+  assert('First byte: rotateLeft8(0x5A, 10) = 0x69', firstRotated === 0x69, 'Got: 0x' + hexByte(firstRotated));
+  const firstResult = exInv[firstRotated];
+  assert('First byte: inv[0x69] = 0x96', firstResult === 0x96, 'Got: 0x' + hexByte(firstResult));
+
+  // Test 13: parseHexBytes
+  const ph1 = parseHexBytes('FF FE FD');
+  assert('parseHexBytes("FF FE FD")', ph1 && ph1.length === 3 && ph1[0] === 0xFF && ph1[1] === 0xFE && ph1[2] === 0xFD);
+  const ph2 = parseHexBytes('$FF, $FE');
+  assert('parseHexBytes("$FF, $FE")', ph2 && ph2.length === 2 && ph2[0] === 0xFF);
+  const ph3 = parseHexBytes('0xFF 0x00');
+  assert('parseHexBytes("0xFF 0x00")', ph3 && ph3.length === 2 && ph3[0] === 0xFF && ph3[1] === 0x00);
+  const ph4 = parseHexBytes('GG');
+  assert('parseHexBytes("GG") returns null', ph4 === null);
+
+  // Test 14: concat
+  const c1 = concat(new Uint8Array([1, 2]), new Uint8Array([3, 4, 5]));
+  assert('concat([1,2],[3,4,5]) = [1,2,3,4,5]', c1.length === 5 && c1[0] === 1 && c1[4] === 5);
+
+  // Test 15: Packing order (TBL first)
+  assert('Example: TBL block starts at offset 0', exCombined[0] === 0x5A, 'Got: 0x' + hexByte(exCombined[0]));
+  assert('Example: BIN block starts after TBL', exCombined[exTblBlock.length] === 0x57, 'Got: 0x' + hexByte(exCombined[exTblBlock.length]));
+
+  // Test 16: Header data length for large files
+  const bigLen = 0x01020304;
+  const bigH = buildHeader(0x5A, 10, bigLen);
+  assert('Large data length big-endian encoding', bigH[12] === 0x01 && bigH[13] === 0x02 && bigH[14] === 0x03 && bigH[15] === 0x04);
+
+  // Test 17: strToAsciiBytes
+  const ascii = strToAsciiBytes('AB');
+  assert('strToAsciiBytes("AB") = [0x41, 0x42]', ascii[0] === 0x41 && ascii[1] === 0x42);
+
+  // Test 18: Obfuscation info appended unchanged
+  assert('Obfuscation info at end of output', exFinal[exObf.length] === 0x02 && exFinal[exObf.length + 1] === 0x0A,
+    'Got: ' + hexByte(exFinal[exObf.length]) + ' ' + hexByte(exFinal[exObf.length + 1]));
+
+  // Test 19: isAsciiPrintable
+  assert('isAsciiPrintable("ABC") = true', isAsciiPrintable('ABC'));
+  assert('isAsciiPrintable with tab = false', !isAsciiPrintable('A\tB'));
+
+  // Test 20: TYPE limits
+  const savedType2 = comboType;
+  comboType = 'TYPE2';
+  assert('TYPE2 max downloads = 10', getMaxDownloads() === 10);
+  comboType = 'TYPE3';
+  assert('TYPE3 max downloads = 18', getMaxDownloads() === 18);
+  assert('TYPE2 TBL lines = 100', (comboType = 'TYPE2', getTblLineCount()) === 100);
+  assert('TYPE3 TBL lines = 300', (comboType = 'TYPE3', getTblLineCount()) === 300);
+  comboType = savedType2;
+
+  // Render results
+  let html = '<div style="margin-bottom:8px"><b>Results: ' + pass + ' passed, ' + fail + ' failed, ' + (pass + fail) + ' total</b></div>';
+  if (fail === 0) {
+    html += '<div class="status pass">All tests passed.</div>';
+  } else {
+    html += '<div class="status fail">' + fail + ' test(s) failed.</div>';
+  }
+  for (const r of results) {
+    if (r.pass) {
+      html += '<div class="test-pass">PASS: ' + esc(r.name) + '</div>';
+    } else {
+      html += '<div class="test-fail">FAIL: ' + esc(r.name) + (r.detail ? ' (' + esc(r.detail) + ')' : '') + '</div>';
+    }
+  }
+  document.getElementById('test-results').innerHTML = html;
 }
 
 // --- Init ---
@@ -1012,10 +1491,12 @@ function resetAll() {
   const st = selfTest();
   const el = document.getElementById('selftest-result');
   el.innerHTML = st.pass
-    ? `<div class="status pass" style="margin-bottom:12px">${esc(st.msg)}</div>`
-    : `<div class="status fail" style="margin-bottom:12px">${esc(st.msg)}</div>`;
+    ? '<div class="status pass" style="margin-bottom:12px">' + esc(st.msg) + '</div>'
+    : '<div class="status fail" style="margin-bottom:12px">' + esc(st.msg) + '</div>';
   setMode('example');
   parseObfInfo();
+  renderCoverage();
+  updateDownloadIdsDisplay();
 })();
 </script>
 

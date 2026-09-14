@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBL + BIN Combination File Builder</title>
+<style>
+:root {
+  --bg: #f5f6fa; --surface: #fff; --border: #d1d5db; --text: #1f2937;
+  --text2: #6b7280; --accent: #2563eb; --accent-bg: #eff6ff;
+  --err: #dc2626; --ok: #16a34a; --ok-bg: #f0fdf4;
+  --warn: #d97706; --warn-bg: #fffbeb;
+  --hdr-id: #ef4444; --hdr-id-bg: #fee2e2;
+  --hdr-rsv: #f59e0b; --hdr-rsv-bg: #fef3c7;
+  --hdr-fnlen: #3b82f6; --hdr-fnlen-bg: #dbeafe;
+  --hdr-dlen: #10b981; --hdr-dlen-bg: #d1fae5;
+  --fn-clr: #8b5cf6; --fn-bg: #ede9fe;
+  --data-clr: #f97316; --data-bg: #ffedd5;
+  --info-clr: #ec4899; --info-bg: #fce7f3;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px; color: var(--text);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); padding: 16px; max-width: 1200px; margin: 0 auto; }
+h1 { font-size: 1.5rem; margin-bottom: 4px; }
+.subtitle { color: var(--text2); margin-bottom: 16px; font-size: 0.9rem; }
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; }
+.section-hdr { padding: 12px 16px; cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; font-weight: 600; }
+.section-hdr .num { background: var(--accent); color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; flex-shrink: 0; }
+.section-hdr .arrow { margin-left: auto; transition: transform .2s; }
+.section-hdr.collapsed .arrow { transform: rotate(-90deg); }
+.section-body { padding: 0 16px 16px; }
+.section-body.hidden { display: none; }
+.mode-btns { display: flex; gap: 8px; margin-bottom: 12px; }
+.mode-btn { padding: 8px 20px; border: 2px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; font-weight: 500; }
+.mode-btn.active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.upload-area { border: 2px dashed var(--border); border-radius: 8px; padding: 20px; text-align: center; margin-bottom: 12px; cursor: pointer; transition: border-color .2s; }
+.upload-area:hover, .upload-area.drag { border-color: var(--accent); }
+.upload-area input[type=file] { display: none; }
+.file-info { background: var(--accent-bg); border-radius: 6px; padding: 12px; margin-bottom: 12px; font-size: 0.85rem; }
+.file-info table { width: 100%; border-collapse: collapse; }
+.file-info td { padding: 2px 8px; }
+.file-info td:first-child { font-weight: 600; white-space: nowrap; width: 140px; }
+label { display: block; font-weight: 600; margin: 8px 0 4px; font-size: 0.85rem; }
+.help { color: var(--text2); font-size: 0.8rem; margin-bottom: 4px; }
+input[type=text], textarea { width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-family: 'SF Mono', 'Consolas', monospace; font-size: 0.85rem; }
+input.short { width: 120px; }
+input.med { width: 300px; }
+textarea { resize: vertical; min-height: 60px; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.col { flex: 1; min-width: 280px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: opacity .2s; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-green { background: var(--ok); color: #fff; }
+.btn-outline { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.btn-danger { background: var(--err); color: #fff; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.status { padding: 8px 12px; border-radius: 6px; margin: 8px 0; font-size: 0.85rem; }
+.status.pass { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok); }
+.status.fail { background: #fef2f2; color: var(--err); border: 1px solid var(--err); }
+.status.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn); }
+.status.info { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent); }
+.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 12px; overflow-x: auto; }
+.tab { padding: 8px 14px; cursor: pointer; font-size: 0.8rem; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; color: var(--text2); }
+.tab.active { border-bottom-color: var(--accent); color: var(--accent); }
+.hex-view { font-family: 'SF Mono', 'Consolas', monospace; font-size: 0.78rem; line-height: 1.6; overflow-x: auto; white-space: pre; background: #f9fafb; border: 1px solid var(--border); border-radius: 4px; padding: 8px; }
+.hex-view .off { color: var(--text2); }
+.hex-view .ascii { color: var(--text2); margin-left: 8px; }
+.hex-view .sep { color: #d1d5db; }
+.hx-id { color: var(--hdr-id); background: var(--hdr-id-bg); }
+.hx-rsv { color: var(--hdr-rsv); background: var(--hdr-rsv-bg); }
+.hx-fnl { color: var(--hdr-fnlen); background: var(--hdr-fnlen-bg); }
+.hx-dl { color: var(--hdr-dlen); background: var(--hdr-dlen-bg); }
+.hx-fn { color: var(--fn-clr); background: var(--fn-bg); }
+.hx-dat { color: var(--data-clr); background: var(--data-bg); }
+.hx-inf { color: var(--info-clr); background: var(--info-bg); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; font-size: 0.78rem; }
+.legend span { display: inline-flex; align-items: center; gap: 4px; }
+.legend .sw { display: inline-block; width: 14px; height: 14px; border-radius: 2px; }
+.pag { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 0.8rem; }
+.pag button { padding: 2px 10px; }
+.trace-box { background: #f9fafb; border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-top: 8px; font-family: 'SF Mono', 'Consolas', monospace; font-size: 0.82rem; line-height: 1.8; }
+.trace-box .step { margin: 4px 0; }
+.trace-box .val { font-weight: 700; color: var(--accent); }
+.err-msg { color: var(--err); font-size: 0.82rem; margin-top: 4px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } .row { flex-direction: column; } }
+.example-note { background: var(--warn-bg); border: 1px solid var(--warn); border-radius: 6px; padding: 8px 12px; font-size: 0.82rem; color: var(--warn); margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<h1>TBL + BIN Combination File Builder</h1>
+<p class="subtitle">Combine an additional information file (.TBL) and a download file (.BIN) into one obfuscated .ENC file.</p>
+<div id="selftest-result"></div>
+
+<!-- Section 1: Mode & Files -->
+<div class="section">
+  <div class="section-hdr" onclick="toggleSection(this)">
+    <span class="num">1</span> Select Mode &amp; Input Files <span class="arrow">&#9660;</span>
+  </div>
+  <div class="section-body">
+    <div class="mode-btns">
+      <button class="mode-btn active" id="btn-example" onclick="setMode('example')">Example Mode</button>
+      <button class="mode-btn" id="btn-custom" onclick="setMode('custom')">Custom Mode</button>
+    </div>
+    <div id="example-note" class="example-note">
+      Example mode loads fixed sample data for learning and verification. The example settings are demonstration values and do not define all production fields.
+    </div>
+    <div id="custom-inputs" style="display:none">
+      <div class="grid2">
+        <div>
+          <label>Additional Information File (.TBL)</label>
+          <div class="upload-area" id="drop-tbl" onclick="document.getElementById('file-tbl').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="event.preventDefault();this.classList.remove('drag');handleFile(event.dataTransfer.files[0],'tbl')">
+            <input type="file" id="file-tbl" accept=".tbl,.TBL" onchange="handleFile(this.files[0],'tbl')">
+            <div>Drop .TBL file here or click to browse</div>
+          </div>
+        </div>
+        <div>
+          <label>Download File #0 (.BIN)</label>
+          <div class="upload-area" id="drop-bin" onclick="document.getElementById('file-bin').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="event.preventDefault();this.classList.remove('drag');handleFile(event.dataTransfer.files[0],'bin')">
+            <input type="file" id="file-bin" accept=".bin,.BIN" onchange="handleFile(this.files[0],'bin')">
+            <div>Drop .BIN file here or click to browse</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="file-info-tbl" class="file-info" style="display:none"></div>
+    <div id="file-info-bin" class="file-info" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Section 2: Filenames & Header -->
+<div class="section">
+  <div class="section-hdr" onclick="toggleSection(this)">
+    <span class="num">2</span> Review Filenames &amp; Header Information <span class="arrow">&#9660;</span>
+  </div>
+  <div class="section-body">
+    <div class="grid2">
+      <div>
+        <label>Embedded TBL Filename</label>
+        <p class="help">ASCII only. This name is stored in the header, not the OS filename.</p>
+        <input type="text" id="fname-tbl" oninput="validateFname('tbl');invalidateResult()">
+        <div id="fname-tbl-err" class="err-msg"></div>
+      </div>
+      <div>
+        <label>Embedded BIN Filename</label>
+        <p class="help">ASCII only. This name is stored in the header, not the OS filename.</p>
+        <input type="text" id="fname-bin" oninput="validateFname('bin');invalidateResult()">
+        <div id="fname-bin-err" class="err-msg"></div>
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <label>Output Filename</label>
+      <p class="help">The .ENC file that will be downloaded.</p>
+      <input type="text" id="fname-out" class="med" oninput="invalidateResult()">
+    </div>
+  </div>
+</div>
+
+<!-- Section 3: Obfuscation Settings -->
+<div class="section">
+  <div class="section-hdr" onclick="toggleSection(this)">
+    <span class="num">3</span> Configure Obfuscation Settings <span class="arrow">&#9660;</span>
+  </div>
+  <div class="section-body">
+    <div class="grid2">
+      <div>
+        <label>File ID for .TBL block</label>
+        <p class="help">1-byte hex value identifying the TBL block. Example: 5A</p>
+        <input type="text" id="id-tbl" class="short" value="5A" oninput="invalidateResult()">
+      </div>
+      <div>
+        <label>File ID for .BIN block</label>
+        <p class="help">1-byte hex value identifying the BIN block. Example: 57</p>
+        <input type="text" id="id-bin" class="short" value="57" oninput="invalidateResult()">
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <label>Unspecified header bytes (7 bytes)</label>
+      <p class="help">Zero in the supplied example. Enter 14 hex digits. These bytes occupy offsets 0x01-0x07 in each block header.</p>
+      <input type="text" id="hdr-reserved" class="med" value="00000000000000" oninput="invalidateResult()">
+      <div id="hdr-reserved-err" class="err-msg"></div>
+    </div>
+    <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)">
+    <label>Obfuscation Information (16 bytes)</label>
+    <p class="help">Appended unchanged to the end of the output. The byte at index 1 gives the left-rotation count for the demonstrated algorithm.</p>
+    <input type="text" id="obf-info" value="02 0A 00 00 00 00 00 00 00 00 00 00 00 00 00 00" oninput="parseObfInfo();invalidateResult()">
+    <div id="obf-info-err" class="err-msg"></div>
+    <div id="obf-info-detail" class="help" style="margin-top:4px"></div>
+
+    <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)">
+    <label>256-Byte Lookup Table</label>
+    <p class="help">A permutation of all values 00-FF. In example mode, uses descending values (FF FE FD ... 01 00). In custom mode, paste hex or upload a 256-byte binary file.</p>
+    <div id="lut-custom-input" style="display:none">
+      <div style="margin:4px 0">
+        <button class="btn btn-outline" onclick="document.getElementById('file-lut').click()">Upload 256-byte binary</button>
+        <input type="file" id="file-lut" style="display:none" onchange="loadLutFile(this.files[0])">
+        <span class="help" style="margin-left:8px">Or paste hex below</span>
+      </div>
+      <textarea id="lut-text" rows="6" placeholder="Paste hex: FF FE FD ... or $FF $FE ... or 0xFF 0xFE ..." oninput="parseLutText();invalidateResult()"></textarea>
+    </div>
+    <div id="lut-info" class="help" style="margin-top:4px"></div>
+    <div id="lut-err" class="err-msg"></div>
+  </div>
+</div>
+
+<!-- Section 4: Preview -->
+<div class="section">
+  <div class="section-hdr" onclick="toggleSection(this)">
+    <span class="num">4</span> Preview Processing Steps <span class="arrow">&#9660;</span>
+  </div>
+  <div class="section-body">
+    <div id="preview-placeholder" class="help">Generate the result first to see the processing steps.</div>
+    <div id="preview-content" style="display:none">
+      <div class="legend">
+        <span><span class="sw" style="background:var(--hdr-id-bg);border:1px solid var(--hdr-id)"></span> File ID</span>
+        <span><span class="sw" style="background:var(--hdr-rsv-bg);border:1px solid var(--hdr-rsv)"></span> Reserved bytes</span>
+        <span><span class="sw" style="background:var(--hdr-fnlen-bg);border:1px solid var(--hdr-fnlen)"></span> Filename length</span>
+        <span><span class="sw" style="background:var(--hdr-dlen-bg);border:1px solid var(--hdr-dlen)"></span> Data length</span>
+        <span><span class="sw" style="background:var(--fn-bg);border:1px solid var(--fn-clr)"></span> Filename</span>
+        <span><span class="sw" style="background:var(--data-bg);border:1px solid var(--data-clr)"></span> File data</span>
+        <span><span class="sw" style="background:var(--info-bg);border:1px solid var(--info-clr)"></span> Obfuscation info</span>
+      </div>
+      <div class="tabs" id="preview-tabs"></div>
+      <div id="preview-pane"></div>
+    </div>
+    <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)">
+    <label>Trace One Byte</label>
+    <p class="help">Enter an offset (hex) in the pre-obfuscation combined data to trace its transformation step by step.</p>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+      <span style="font-family:monospace">0x</span>
+      <input type="text" id="trace-offset" class="short" placeholder="00" oninput="traceByte()">
+      <span id="trace-range" class="help"></span>
+    </div>
+    <div id="trace-result"></div>
+  </div>
+</div>
+
+<!-- Section 5: Generate & Download -->
+<div class="section">
+  <div class="section-hdr" onclick="toggleSection(this)">
+    <span class="num">5</span> Generate &amp; Download .ENC File <span class="arrow">&#9660;</span>
+  </div>
+  <div class="section-body">
+    <div class="btn-group">
+      <button class="btn btn-primary" id="btn-load" onclick="loadExample()">Load Example</button>
+      <button class="btn btn-green" id="btn-generate" onclick="generate()">Generate / Refresh Preview</button>
+      <button class="btn btn-primary" id="btn-download" onclick="downloadEnc()" disabled>Download .ENC</button>
+      <button class="btn btn-outline" onclick="resetAll()">Reset</button>
+    </div>
+    <div id="gen-status" style="margin-top:8px"></div>
+    <div id="verify-status" style="margin-top:4px"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+let mode = 'example';
+let tblData = null, binData = null;
+let lookupTable = null;
+let generatedResult = null;
+let resultValid = false;
+
+const EXAMPLE_TBL_NAME = 'XXXXX-XXXXX_M0.TBL';
+const EXAMPLE_BIN_NAME = 'XXXXX-XXXXX_M0_00.BIN';
+const EXAMPLE_TBL_DATA = new Uint8Array([0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0x41,0x42,0x43,0x44,0x0D,0x0A]);
+const EXAMPLE_BIN_DATA = new Uint8Array([0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0A,0x0B,0x0C,0x0D,0x0E,0x0F]);
+const EXPECTED_OUTPUT = new Uint8Array([
+  0x96,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xB7,0xFF,0xFF,0xFF,0xBF,
+  0x9E,0x9E,0x9E,0x9E,0x9E,0x4B,0x9E,0x9E,0x9E,0x9E,0x9E,0x82,0xCA,0x3F,0x47,0xAE,
+  0xF6,0xCE,0x3F,0x3B,0x37,0x33,0x2F,0x2B,0x27,0x23,0x1F,0x1B,0xFA,0xF6,0xF2,0xEE,
+  0xCB,0xD7,0xA2,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xAB,0xFF,0xFF,
+  0xFF,0xBF,0x9E,0x9E,0x9E,0x9E,0x9E,0x4B,0x9E,0x9E,0x9E,0x9E,0x9E,0x82,0xCA,0x3F,
+  0x82,0x3F,0x3F,0x47,0xF6,0xDA,0xC6,0xFF,0xFB,0xF7,0xF3,0xEF,0xEB,0xE7,0xE3,0xDF,
+  0xDB,0xD7,0xD3,0xCF,0xCB,0xC7,0xC3,0x02,0x0A,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00
+]);
+
+function makeDescendingTable() {
+  const t = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) t[i] = 0xFF - i;
+  return t;
+}
+
+function rotateLeft8(byte, count) {
+  count = ((count % 8) + 8) % 8;
+  if (count === 0) return byte;
+  return ((byte << count) | (byte >>> (8 - count))) & 0xFF;
+}
+
+function buildInverse(table) {
+  const inv = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) inv[table[i]] = i;
+  return inv;
+}
+
+function buildHeader(fileId, reservedBytes, fnLen, dataLen) {
+  const h = new Uint8Array(16);
+  h[0] = fileId;
+  for (let i = 0; i < 7; i++) h[i + 1] = reservedBytes[i];
+  h[8]  = (fnLen >>> 24) & 0xFF;
+  h[9]  = (fnLen >>> 16) & 0xFF;
+  h[10] = (fnLen >>> 8) & 0xFF;
+  h[11] = fnLen & 0xFF;
+  h[12] = (dataLen >>> 24) & 0xFF;
+  h[13] = (dataLen >>> 16) & 0xFF;
+  h[14] = (dataLen >>> 8) & 0xFF;
+  h[15] = dataLen & 0xFF;
+  return h;
+}
+
+function strToAsciiBytes(s) {
+  const arr = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) arr[i] = s.charCodeAt(i);
+  return arr;
+}
+
+function concat(...arrays) {
+  let len = 0;
+  for (const a of arrays) len += a.length;
+  const out = new Uint8Array(len);
+  let off = 0;
+  for (const a of arrays) { out.set(a, off); off += a.length; }
+  return out;
+}
+
+function hexByte(v) { return v.toString(16).toUpperCase().padStart(2, '0'); }
+function hexOffset(v) { return v.toString(16).toUpperCase().padStart(4, '0'); }
+
+function isAscii(s) {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x20 || c > 0x7E) return false;
+  }
+  return true;
+}
+
+function parseHexByte(s) {
+  s = s.trim();
+  if (s.startsWith('$')) s = s.slice(1);
+  else if (s.startsWith('0x') || s.startsWith('0X')) s = s.slice(2);
+  if (!/^[0-9A-Fa-f]{1,2}$/.test(s)) return -1;
+  return parseInt(s, 16);
+}
+
+function parseHexBytes(text) {
+  const tokens = text.replace(/,/g, ' ').split(/\s+/).filter(t => t.length > 0);
+  const bytes = [];
+  for (const t of tokens) {
+    const v = parseHexByte(t);
+    if (v < 0) return null;
+    bytes.push(v);
+  }
+  return new Uint8Array(bytes);
+}
+
+function validatePermutation(table) {
+  if (table.length !== 256) return 'Table must contain exactly 256 bytes.';
+  const seen = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) {
+    if (seen[table[i]]) return `Duplicate value: ${hexByte(table[i])} appears more than once.`;
+    seen[table[i]] = 1;
+  }
+  for (let i = 0; i < 256; i++) {
+    if (!seen[i]) return `Missing value: ${hexByte(i)} is not in the table.`;
+  }
+  return null;
+}
+
+// --- Self-test with non-symmetric table ---
+function selfTest() {
+  const table = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) table[i] = (i + 1) % 256;
+  const inv = buildInverse(table);
+  const testByte = 0x05;
+  const rotCount = 2;
+  const rotated = rotateLeft8(testByte, rotCount);
+  const resultInverse = inv[rotated];
+  const resultDirect = table[rotated];
+  if (resultInverse === resultDirect) return { pass: false, msg: 'Non-symmetric test inconclusive: direct and inverse give same result.' };
+  const expected = resultInverse;
+  const singleInput = new Uint8Array([testByte]);
+  const obfuscated = obfuscateData(singleInput, inv, rotCount);
+  if (obfuscated[0] === expected) return { pass: true, msg: 'Internal self-test passed: inverse lookup correctly used (non-symmetric table).' };
+  return { pass: false, msg: 'Internal self-test FAILED: direct lookup used instead of inverse.' };
+}
+
+function obfuscateData(data, inverseTable, rotCount) {
+  const out = new Uint8Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    const rotated = rotateLeft8(data[i], rotCount);
+    out[i] = inverseTable[rotated];
+  }
+  return out;
+}
+
+// --- UI ---
+function toggleSection(hdr) {
+  hdr.classList.toggle('collapsed');
+  const body = hdr.nextElementSibling;
+  body.classList.toggle('hidden');
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-example').classList.toggle('active', m === 'example');
+  document.getElementById('btn-custom').classList.toggle('active', m === 'custom');
+  document.getElementById('example-note').style.display = m === 'example' ? '' : 'none';
+  document.getElementById('custom-inputs').style.display = m === 'custom' ? '' : 'none';
+  document.getElementById('lut-custom-input').style.display = m === 'custom' ? '' : 'none';
+  document.getElementById('btn-load').style.display = m === 'example' ? '' : 'none';
+  if (m === 'example') {
+    lookupTable = makeDescendingTable();
+    document.getElementById('lut-info').textContent = 'Using descending table: FF FE FD ... 01 00';
+    document.getElementById('lut-err').textContent = '';
+  } else {
+    lookupTable = null;
+    document.getElementById('lut-info').textContent = '';
+  }
+  invalidateResult();
+}
+
+function handleFile(file, type) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function() {
+    const data = new Uint8Array(reader.result);
+    if (type === 'tbl') {
+      tblData = data;
+      document.getElementById('fname-tbl').value = file.name;
+      showFileInfo('tbl', file.name, data);
+    } else {
+      binData = data;
+      document.getElementById('fname-bin').value = file.name;
+      showFileInfo('bin', file.name, data);
+    }
+    const tblBase = document.getElementById('fname-tbl').value.replace(/\.[^.]+$/, '');
+    if (tblBase) document.getElementById('fname-out').value = tblBase + '.ENC';
+    invalidateResult();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showFileInfo(type, name, data) {
+  const el = document.getElementById('file-info-' + type);
+  el.style.display = '';
+  const hexSize = '0x' + data.length.toString(16).toUpperCase();
+  const previewLen = Math.min(data.length, 64);
+  let hexStr = '', ascStr = '';
+  for (let i = 0; i < previewLen; i++) {
+    hexStr += hexByte(data[i]) + ' ';
+    ascStr += (data[i] >= 0x20 && data[i] <= 0x7E) ? String.fromCharCode(data[i]) : '.';
+  }
+  if (data.length > 64) { hexStr += '...'; ascStr += '...'; }
+  el.innerHTML = `<table>
+    <tr><td>Original filename:</td><td>${esc(name)}</td></tr>
+    <tr><td>Size:</td><td>${data.length} bytes (${hexSize})</td></tr>
+    <tr><td>Hex preview:</td><td style="font-family:monospace;font-size:0.78rem;word-break:break-all">${esc(hexStr)}</td></tr>
+    <tr><td>ASCII preview:</td><td style="font-family:monospace;font-size:0.78rem">${esc(ascStr)}</td></tr>
+  </table>`;
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function validateFname(type) {
+  const el = document.getElementById('fname-' + type);
+  const err = document.getElementById('fname-' + type + '-err');
+  const v = el.value;
+  if (v.length === 0) { err.textContent = 'Filename is required.'; return false; }
+  for (let i = 0; i < v.length; i++) {
+    const c = v.charCodeAt(i);
+    if (c < 0x20 || c > 0x7E) {
+      err.textContent = `Non-ASCII character at position ${i} (code ${c}). Only printable ASCII (0x20-0x7E) is allowed.`;
+      return false;
+    }
+  }
+  err.textContent = '';
+  return true;
+}
+
+function parseObfInfo() {
+  const text = document.getElementById('obf-info').value;
+  const bytes = parseHexBytes(text);
+  const err = document.getElementById('obf-info-err');
+  const detail = document.getElementById('obf-info-detail');
+  if (!bytes || bytes.length !== 16) {
+    err.textContent = 'Must be exactly 16 hex bytes.';
+    detail.textContent = '';
+    return null;
+  }
+  err.textContent = '';
+  const rotRaw = bytes[1];
+  const rotEff = ((rotRaw % 8) + 8) % 8;
+  detail.innerHTML = `Byte[1] = 0x${hexByte(rotRaw)} = ${rotRaw} decimal. ` +
+    `Left-rotation count: ${rotRaw} mod 8 = ${rotEff}. ` +
+    `<br>The meanings of byte[0] (0x${hexByte(bytes[0])}) and bytes[2-15] are not defined by the supplied example. They are preserved exactly.`;
+  return bytes;
+}
+
+function parseLutText() {
+  const text = document.getElementById('lut-text').value.trim();
+  const err = document.getElementById('lut-err');
+  const info = document.getElementById('lut-info');
+  if (!text) { lookupTable = null; err.textContent = ''; info.textContent = ''; return; }
+  const bytes = parseHexBytes(text);
+  if (!bytes) { err.textContent = 'Invalid hex format. Use FF, $FF, or 0xFF separated by spaces or commas.'; lookupTable = null; return; }
+  const vErr = validatePermutation(bytes);
+  if (vErr) { err.textContent = vErr; lookupTable = null; return; }
+  err.textContent = '';
+  lookupTable = bytes;
+  info.textContent = `Valid permutation table loaded (${bytes.length} bytes).`;
+}
+
+function loadLutFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function() {
+    const data = new Uint8Array(reader.result);
+    const err = document.getElementById('lut-err');
+    const info = document.getElementById('lut-info');
+    if (data.length !== 256) { err.textContent = `File is ${data.length} bytes; must be exactly 256.`; lookupTable = null; return; }
+    const vErr = validatePermutation(data);
+    if (vErr) { err.textContent = vErr; lookupTable = null; return; }
+    err.textContent = '';
+    lookupTable = data;
+    info.textContent = `Valid permutation table loaded from file (${data.length} bytes).`;
+    let hexStr = '';
+    for (let i = 0; i < 256; i++) hexStr += hexByte(data[i]) + (i < 255 ? ' ' : '');
+    document.getElementById('lut-text').value = hexStr;
+    invalidateResult();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function invalidateResult() {
+  resultValid = false;
+  generatedResult = null;
+  document.getElementById('btn-download').disabled = true;
+  document.getElementById('gen-status').innerHTML = '';
+  document.getElementById('verify-status').innerHTML = '';
+  document.getElementById('preview-content').style.display = 'none';
+  document.getElementById('preview-placeholder').style.display = '';
+}
+
+function loadExample() {
+  setMode('example');
+  tblData = new Uint8Array(EXAMPLE_TBL_DATA);
+  binData = new Uint8Array(EXAMPLE_BIN_DATA);
+  lookupTable = makeDescendingTable();
+  document.getElementById('fname-tbl').value = EXAMPLE_TBL_NAME;
+  document.getElementById('fname-bin').value = EXAMPLE_BIN_NAME;
+  document.getElementById('fname-out').value = 'XXXXX-XXXXX_M0.ENC';
+  document.getElementById('id-tbl').value = '5A';
+  document.getElementById('id-bin').value = '57';
+  document.getElementById('hdr-reserved').value = '00000000000000';
+  document.getElementById('obf-info').value = '02 0A 00 00 00 00 00 00 00 00 00 00 00 00 00 00';
+  document.getElementById('hdr-reserved-err').textContent = '';
+  showFileInfo('tbl', EXAMPLE_TBL_NAME, tblData);
+  showFileInfo('bin', EXAMPLE_BIN_NAME, binData);
+  parseObfInfo();
+  document.getElementById('lut-info').textContent = 'Using descending table: FF FE FD ... 01 00';
+  document.getElementById('lut-err').textContent = '';
+  invalidateResult();
+  generate();
+}
+
+function getReservedBytes() {
+  const v = document.getElementById('hdr-reserved').value.trim();
+  const err = document.getElementById('hdr-reserved-err');
+  if (!/^[0-9A-Fa-f]{14}$/.test(v)) {
+    err.textContent = 'Must be exactly 14 hex digits (7 bytes).';
+    return null;
+  }
+  err.textContent = '';
+  const bytes = new Uint8Array(7);
+  for (let i = 0; i < 7; i++) bytes[i] = parseInt(v.substr(i * 2, 2), 16);
+  return bytes;
+}
+
+function getFileId(type) {
+  const v = document.getElementById('id-' + type).value.trim();
+  if (!/^[0-9A-Fa-f]{1,2}$/.test(v)) return -1;
+  return parseInt(v, 16);
+}
+
+function generate() {
+  const errors = [];
+
+  if (!tblData) errors.push('No .TBL file loaded.');
+  if (!binData) errors.push('No .BIN file loaded.');
+  if (!validateFname('tbl')) errors.push('Invalid TBL filename.');
+  if (!validateFname('bin')) errors.push('Invalid BIN filename.');
+
+  const tblId = getFileId('tbl');
+  const binId = getFileId('bin');
+  if (tblId < 0) errors.push('Invalid TBL file ID (need 1-2 hex digits).');
+  if (binId < 0) errors.push('Invalid BIN file ID (need 1-2 hex digits).');
+
+  const reserved = getReservedBytes();
+  if (!reserved) errors.push('Invalid reserved header bytes.');
+
+  const obfInfo = parseObfInfo();
+  if (!obfInfo) errors.push('Invalid obfuscation information.');
+
+  if (!lookupTable) errors.push('No valid lookup table.');
+
+  if (errors.length) {
+    document.getElementById('gen-status').innerHTML = `<div class="status fail">${errors.map(esc).join('<br>')}</div>`;
+    return;
+  }
+
+  const tblFnameBytes = strToAsciiBytes(document.getElementById('fname-tbl').value);
+  const binFnameBytes = strToAsciiBytes(document.getElementById('fname-bin').value);
+
+  const tblHeader = buildHeader(tblId, reserved, tblFnameBytes.length, tblData.length);
+  const binHeader = buildHeader(binId, reserved, binFnameBytes.length, binData.length);
+
+  const tblBlock = concat(tblHeader, tblFnameBytes, tblData);
+  const binBlock = concat(binHeader, binFnameBytes, binData);
+  const combined = concat(tblBlock, binBlock);
+
+  const rotCount = obfInfo[1];
+  const inverseTable = buildInverse(lookupTable);
+  const obfuscated = obfuscateData(combined, inverseTable, rotCount);
+  const finalOutput = concat(obfuscated, obfInfo);
+
+  generatedResult = {
+    tblHeader, binHeader, tblFnameBytes, binFnameBytes,
+    tblBlock, binBlock, combined, obfuscated, finalOutput,
+    obfInfo, rotCount, inverseTable,
+    tblFnLen: tblFnameBytes.length, binFnLen: binFnameBytes.length,
+    tblDataLen: tblData.length, binDataLen: binData.length
+  };
+  resultValid = true;
+
+  const outName = document.getElementById('fname-out').value || 'output.ENC';
+  let statusHtml = `<div class="status info">Generated: <b>${esc(outName)}</b> &mdash; ${finalOutput.length} bytes (0x${finalOutput.length.toString(16).toUpperCase()})`;
+  statusHtml += `<br>TBL block: ${tblBlock.length} bytes | BIN block: ${binBlock.length} bytes | Combined: ${combined.length} bytes`;
+  statusHtml += `<br>Obfuscation info appended at offset 0x${combined.length.toString(16).toUpperCase()}</div>`;
+  document.getElementById('gen-status').innerHTML = statusHtml;
+
+  // Verification
+  if (mode === 'example') {
+    let match = finalOutput.length === EXPECTED_OUTPUT.length;
+    if (match) {
+      for (let i = 0; i < finalOutput.length; i++) {
+        if (finalOutput[i] !== EXPECTED_OUTPUT[i]) { match = false; break; }
+      }
+    }
+    document.getElementById('verify-status').innerHTML = match
+      ? '<div class="status pass">Example verification: PASS &mdash; all 119 bytes match the reference.</div>'
+      : '<div class="status fail">Example verification: FAIL &mdash; output does not match the expected reference.</div>';
+  } else {
+    document.getElementById('verify-status').innerHTML = '<div class="status info">Custom mode: no reference to verify against.</div>';
+  }
+
+  document.getElementById('btn-download').disabled = false;
+  renderPreview();
+  traceByte();
+}
+
+// --- Preview rendering ---
+const ROWS_PER_PAGE = 16;
+let previewPages = {};
+let currentTab = '';
+
+function renderPreview() {
+  if (!generatedResult) return;
+  document.getElementById('preview-content').style.display = '';
+  document.getElementById('preview-placeholder').style.display = 'none';
+
+  const r = generatedResult;
+  const tabDefs = [
+    { id: 'input-tbl', label: 'TBL Input', data: tblData, regions: [{s:0,e:tblData.length,c:'hx-dat'}] },
+    { id: 'input-bin', label: 'BIN Input', data: binData, regions: [{s:0,e:binData.length,c:'hx-dat'}] },
+    { id: 'hdr-tbl', label: 'TBL Header', data: r.tblHeader, regions: makeHdrRegions(0, 0, 0) },
+    { id: 'hdr-bin', label: 'BIN Header', data: r.binHeader, regions: makeHdrRegions(0, 0, 0) },
+    { id: 'block-tbl', label: 'TBL Block', data: r.tblBlock, regions: makeBlockRegions(r.tblFnLen, r.tblDataLen) },
+    { id: 'block-bin', label: 'BIN Block', data: r.binBlock, regions: makeBlockRegions(r.binFnLen, r.binDataLen) },
+    { id: 'combined', label: 'Combined (pre-obf)', data: r.combined, regions: makeCombinedRegions(r) },
+    { id: 'obfuscated', label: 'Obfuscated', data: r.obfuscated, regions: [] },
+    { id: 'final', label: 'Final Output', data: r.finalOutput, regions: [{s:0,e:r.obfuscated.length,c:''},{s:r.obfuscated.length,e:r.finalOutput.length,c:'hx-inf'}] },
+  ];
+
+  previewPages = {};
+  for (const t of tabDefs) previewPages[t.id] = { data: t.data, regions: t.regions, page: 0 };
+
+  const tabsEl = document.getElementById('preview-tabs');
+  tabsEl.innerHTML = '';
+  for (const t of tabDefs) {
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (t.id === tabDefs[0].id ? ' active' : '');
+    tab.textContent = t.label;
+    tab.dataset.id = t.id;
+    tab.onclick = function() { switchTab(t.id); };
+    tabsEl.appendChild(tab);
+  }
+  currentTab = tabDefs[0].id;
+  renderHexPane(currentTab);
+}
+
+function makeHdrRegions(baseOff, fnLen, dataLen) {
+  return [
+    {s:0,e:1,c:'hx-id'}, {s:1,e:8,c:'hx-rsv'},
+    {s:8,e:12,c:'hx-fnl'}, {s:12,e:16,c:'hx-dl'}
+  ];
+}
+
+function makeBlockRegions(fnLen, dataLen) {
+  return [
+    {s:0,e:1,c:'hx-id'}, {s:1,e:8,c:'hx-rsv'},
+    {s:8,e:12,c:'hx-fnl'}, {s:12,e:16,c:'hx-dl'},
+    {s:16,e:16+fnLen,c:'hx-fn'}, {s:16+fnLen,e:16+fnLen+dataLen,c:'hx-dat'}
+  ];
+}
+
+function makeCombinedRegions(r) {
+  const tblFn = r.tblFnLen, tblD = r.tblDataLen, binFn = r.binFnLen, binD = r.binDataLen;
+  const o1 = 0;
+  const tblBlkEnd = 16 + tblFn + tblD;
+  const o2 = tblBlkEnd;
+  const binBlkEnd = o2 + 16 + binFn + binD;
+  return [
+    {s:o1,e:o1+1,c:'hx-id'},{s:o1+1,e:o1+8,c:'hx-rsv'},
+    {s:o1+8,e:o1+12,c:'hx-fnl'},{s:o1+12,e:o1+16,c:'hx-dl'},
+    {s:o1+16,e:o1+16+tblFn,c:'hx-fn'},{s:o1+16+tblFn,e:tblBlkEnd,c:'hx-dat'},
+    {s:o2,e:o2+1,c:'hx-id'},{s:o2+1,e:o2+8,c:'hx-rsv'},
+    {s:o2+8,e:o2+12,c:'hx-fnl'},{s:o2+12,e:o2+16,c:'hx-dl'},
+    {s:o2+16,e:o2+16+binFn,c:'hx-fn'},{s:o2+16+binFn,e:binBlkEnd,c:'hx-dat'}
+  ];
+}
+
+function getRegionClass(regions, idx) {
+  for (const r of regions) {
+    if (idx >= r.s && idx < r.e) return r.c;
+  }
+  return '';
+}
+
+function switchTab(id) {
+  document.querySelectorAll('#preview-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.id === id));
+  currentTab = id;
+  previewPages[id].page = 0;
+  renderHexPane(id);
+}
+
+function renderHexPane(id) {
+  const info = previewPages[id];
+  const data = info.data;
+  const regions = info.regions;
+  const page = info.page;
+  const totalRows = Math.ceil(data.length / 16) || 1;
+  const totalPages = Math.ceil(totalRows / ROWS_PER_PAGE);
+  const startRow = page * ROWS_PER_PAGE;
+  const endRow = Math.min(startRow + ROWS_PER_PAGE, totalRows);
+
+  let html = '<div class="hex-view">';
+  for (let row = startRow; row < endRow; row++) {
+    const off = row * 16;
+    let hexPart = '', ascPart = '';
+    for (let col = 0; col < 16; col++) {
+      const idx = off + col;
+      if (idx < data.length) {
+        const cls = getRegionClass(regions, idx);
+        const hx = hexByte(data[idx]);
+        hexPart += cls ? `<span class="${cls}">${hx}</span>` : hx;
+        hexPart += col < 15 ? ' ' : '';
+        const ch = (data[idx] >= 0x20 && data[idx] <= 0x7E) ? String.fromCharCode(data[idx]) : '.';
+        ascPart += cls ? `<span class="${cls}">${esc(ch)}</span>` : esc(ch);
+      } else {
+        hexPart += '   ';
+        ascPart += ' ';
+      }
+    }
+    html += `<span class="off">${hexOffset(off)}:</span> ${hexPart} <span class="sep">|</span><span class="ascii">${ascPart}</span>\n`;
+  }
+  html += '</div>';
+
+  if (totalPages > 1) {
+    html += `<div class="pag">
+      <button class="btn btn-outline" onclick="prevPage('${id}')" ${page === 0 ? 'disabled' : ''}>Prev</button>
+      Page ${page + 1} / ${totalPages}
+      <button class="btn btn-outline" onclick="nextPage('${id}')" ${page >= totalPages - 1 ? 'disabled' : ''}>Next</button>
+      <span class="help">(${data.length} bytes total)</span>
+    </div>`;
+  } else {
+    html += `<div class="help" style="margin-top:4px">${data.length} bytes</div>`;
+  }
+
+  document.getElementById('preview-pane').innerHTML = html;
+}
+
+function prevPage(id) { previewPages[id].page--; renderHexPane(id); }
+function nextPage(id) { previewPages[id].page++; renderHexPane(id); }
+
+// --- Trace ---
+function traceByte() {
+  const r = generatedResult;
+  if (!r) { document.getElementById('trace-result').innerHTML = ''; document.getElementById('trace-range').textContent = ''; return; }
+
+  document.getElementById('trace-range').textContent = `Valid range: 0x0000 - 0x${hexOffset(r.combined.length - 1)}`;
+
+  const offStr = document.getElementById('trace-offset').value.trim();
+  if (!offStr) { document.getElementById('trace-result').innerHTML = ''; return; }
+  const off = parseInt(offStr, 16);
+  if (isNaN(off) || off < 0 || off >= r.combined.length) {
+    document.getElementById('trace-result').innerHTML = '<div class="err-msg">Offset out of range.</div>';
+    return;
+  }
+
+  const origByte = r.combined[off];
+  const rotRaw = r.rotCount;
+  const rotEff = ((rotRaw % 8) + 8) % 8;
+  const rotated = rotateLeft8(origByte, rotRaw);
+  const result = r.inverseTable[rotated];
+
+  // Find row/col in lookup table
+  let lutRow = -1, lutCol = -1;
+  for (let i = 0; i < 256; i++) {
+    if (lookupTable[i] === rotated) {
+      lutRow = Math.floor(i / 16);
+      lutCol = i % 16;
+      break;
+    }
+  }
+
+  const origBin = origByte.toString(2).padStart(8, '0');
+  const rotBin = rotated.toString(2).padStart(8, '0');
+
+  let html = '<div class="trace-box">';
+  html += `<div class="step">Offset: <span class="val">0x${hexOffset(off)}</span></div>`;
+  html += `<div class="step">Original byte: <span class="val">${hexByte(origByte)}</span> (binary: ${origBin})</div>`;
+  html += `<div class="step">Rotation count: <span class="val">${rotRaw}</span> (effective: ${rotEff}, i.e. ${rotRaw} mod 8 = ${rotEff})</div>`;
+  html += `<div class="step">Rotated byte: <span class="val">${hexByte(rotated)}</span> (binary: ${rotBin})</div>`;
+  html += `<div class="step">Lookup: search table for value ${hexByte(rotated)} &rarr; found at row $${lutRow.toString(16).toUpperCase()}, col $${lutCol.toString(16).toUpperCase()}, index <span class="val">${lutRow * 16 + lutCol}</span> (0x${hexByte(lutRow * 16 + lutCol)})</div>`;
+  html += `<div class="step">Result: <span class="val">${hexByte(origByte)}</span> &rarr; rotate left ${rotRaw} &rarr; <span class="val">${hexByte(rotated)}</span> &rarr; table index ${lutRow * 16 + lutCol} &rarr; output <span class="val">${hexByte(result)}</span></div>`;
+  html += '</div>';
+  document.getElementById('trace-result').innerHTML = html;
+}
+
+// --- Download ---
+function downloadEnc() {
+  if (!generatedResult || !resultValid) return;
+  const outName = document.getElementById('fname-out').value || 'output.ENC';
+  const blob = new Blob([generatedResult.finalOutput], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = outName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function resetAll() {
+  tblData = null; binData = null;
+  lookupTable = mode === 'example' ? makeDescendingTable() : null;
+  document.getElementById('fname-tbl').value = '';
+  document.getElementById('fname-bin').value = '';
+  document.getElementById('fname-out').value = '';
+  document.getElementById('fname-tbl-err').textContent = '';
+  document.getElementById('fname-bin-err').textContent = '';
+  document.getElementById('file-info-tbl').style.display = 'none';
+  document.getElementById('file-info-bin').style.display = 'none';
+  document.getElementById('trace-offset').value = '';
+  document.getElementById('trace-result').innerHTML = '';
+  document.getElementById('trace-range').textContent = '';
+  if (mode === 'custom') {
+    document.getElementById('lut-text').value = '';
+    document.getElementById('lut-info').textContent = '';
+    document.getElementById('lut-err').textContent = '';
+  }
+  invalidateResult();
+}
+
+// --- Init ---
+(function init() {
+  const st = selfTest();
+  const el = document.getElementById('selftest-result');
+  el.innerHTML = st.pass
+    ? `<div class="status pass" style="margin-bottom:12px">${esc(st.msg)}</div>`
+    : `<div class="status fail" style="margin-bottom:12px">${esc(st.msg)}</div>`;
+  setMode('example');
+  parseObfInfo();
+})();
+</script>
+
+</body>
+</html>

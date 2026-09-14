@@ -75,6 +75,8 @@ textarea { resize: vertical; min-height: 60px; }
 .hx-fn { color: var(--fn-clr); background: var(--fn-bg); }
 .hx-dat { color: var(--data-clr); background: var(--data-bg); }
 .hx-inf { color: var(--info-clr); background: var(--info-bg); }
+.hx-obf { color: #92400e; background: #fef9c3; }
+.step-desc { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.82rem; color: #0c4a6e; line-height: 1.5; }
 .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; font-size: 0.78rem; }
 .legend span { display: inline-flex; align-items: center; gap: 4px; }
 .legend .sw { display: inline-block; width: 14px; height: 14px; border-radius: 2px; }
@@ -221,6 +223,7 @@ textarea { resize: vertical; min-height: 60px; }
         <span><span class="sw" style="background:var(--hdr-dlen-bg);border:1px solid var(--hdr-dlen)"></span> Data length</span>
         <span><span class="sw" style="background:var(--fn-bg);border:1px solid var(--fn-clr)"></span> Filename</span>
         <span><span class="sw" style="background:var(--data-bg);border:1px solid var(--data-clr)"></span> File data</span>
+        <span><span class="sw" style="background:#fef9c3;border:1px solid #92400e"></span> Obfuscated data</span>
         <span><span class="sw" style="background:var(--info-bg);border:1px solid var(--info-clr)"></span> Obfuscation info</span>
       </div>
       <div class="tabs" id="preview-tabs"></div>
@@ -627,10 +630,15 @@ function generate() {
   const obfuscated = obfuscateData(combined, inverseTable, rotCount);
   const finalOutput = concat(obfuscated, obfInfo);
 
+  const tblHeaderFn = concat(tblHeader, tblFnameBytes);
+  const binHeaderFn = concat(binHeader, binFnameBytes);
+
   generatedResult = {
     tblHeader, binHeader, tblFnameBytes, binFnameBytes,
+    tblHeaderFn, binHeaderFn,
     tblBlock, binBlock, combined, obfuscated, finalOutput,
     obfInfo, rotCount, inverseTable,
+    tblId, binId,
     tblFnLen: tblFnameBytes.length, binFnLen: binFnameBytes.length,
     tblDataLen: tblData.length, binDataLen: binData.length
   };
@@ -673,20 +681,45 @@ function renderPreview() {
   document.getElementById('preview-placeholder').style.display = 'none';
 
   const r = generatedResult;
+  const fnLenHex = '$' + r.tblFnLen.toString(16).toUpperCase().padStart(8,'0');
+  const dlLenHex = '$' + r.tblDataLen.toString(16).toUpperCase().padStart(8,'0');
+  const bfnLenHex = '$' + r.binFnLen.toString(16).toUpperCase().padStart(8,'0');
+  const bdlLenHex = '$' + r.binDataLen.toString(16).toUpperCase().padStart(8,'0');
+  const rotEff = ((r.rotCount % 8) + 8) % 8;
+
   const tabDefs = [
-    { id: 'input-tbl', label: 'TBL Input', data: tblData, regions: [{s:0,e:tblData.length,c:'hx-dat'}] },
-    { id: 'input-bin', label: 'BIN Input', data: binData, regions: [{s:0,e:binData.length,c:'hx-dat'}] },
-    { id: 'hdr-tbl', label: 'TBL Header', data: r.tblHeader, regions: makeHdrRegions(0, 0, 0) },
-    { id: 'hdr-bin', label: 'BIN Header', data: r.binHeader, regions: makeHdrRegions(0, 0, 0) },
-    { id: 'block-tbl', label: 'TBL Block', data: r.tblBlock, regions: makeBlockRegions(r.tblFnLen, r.tblDataLen) },
-    { id: 'block-bin', label: 'BIN Block', data: r.binBlock, regions: makeBlockRegions(r.binFnLen, r.binDataLen) },
-    { id: 'combined', label: 'Combined (pre-obf)', data: r.combined, regions: makeCombinedRegions(r) },
-    { id: 'obfuscated', label: 'Obfuscated', data: r.obfuscated, regions: [] },
-    { id: 'final', label: 'Final Output', data: r.finalOutput, regions: [{s:0,e:r.obfuscated.length,c:''},{s:r.obfuscated.length,e:r.finalOutput.length,c:'hx-inf'}] },
+    { id: 'step1-tbl', label: 'STEP1: TBL Hdr',
+      desc: `Prepare the header of the additional information file.<br>File ID=$${hexByte(r.tblId)}, file name length=${fnLenHex} (${r.tblFnLen} characters), data length=${dlLenHex} (${r.tblDataLen} bytes).`,
+      data: r.tblHeaderFn,
+      regions: makeStep1Regions(r.tblFnLen) },
+    { id: 'step1-bin', label: 'STEP1: BIN Hdr',
+      desc: `Prepare the header of the download file #0.<br>File ID=$${hexByte(r.binId)}, file name length=${bfnLenHex} (${r.binFnLen} characters), data length=${bdlLenHex} (${r.binDataLen} bytes).`,
+      data: r.binHeaderFn,
+      regions: makeStep1Regions(r.binFnLen) },
+    { id: 'step2-tbl', label: 'STEP2: TBL Block',
+      desc: 'Add the header to the additional information file. The output is as follows.',
+      data: r.tblBlock,
+      regions: makeBlockRegions(r.tblFnLen, r.tblDataLen) },
+    { id: 'step2-bin', label: 'STEP2: BIN Block',
+      desc: 'Add the header to the download file #0. The output is as follows.',
+      data: r.binBlock,
+      regions: makeBlockRegions(r.binFnLen, r.binDataLen) },
+    { id: 'step3', label: 'STEP3: Combined',
+      desc: 'Combine the additional information file with the header and the download file #0 with header. The output is as follows.',
+      data: r.combined,
+      regions: makeCombinedRegions(r) },
+    { id: 'step4', label: 'STEP4: Obfuscated',
+      desc: `Obfuscate the output by STEP3. Using the 2nd byte of the obfuscated information, roll left ${r.rotCount} times ($${hexByte(r.rotCount)}, effective ${rotEff}), then search the random number table for the address where the rotated value is contained. The index is the obfuscation value.`,
+      data: r.obfuscated,
+      regions: [{s:0,e:r.obfuscated.length,c:'hx-obf'}] },
+    { id: 'step5', label: 'STEP5: Final',
+      desc: 'Add the obfuscated information to the output by STEP4. The output is as follows.',
+      data: r.finalOutput,
+      regions: [{s:0,e:r.obfuscated.length,c:'hx-obf'},{s:r.obfuscated.length,e:r.finalOutput.length,c:'hx-inf'}] },
   ];
 
   previewPages = {};
-  for (const t of tabDefs) previewPages[t.id] = { data: t.data, regions: t.regions, page: 0 };
+  for (const t of tabDefs) previewPages[t.id] = { data: t.data, regions: t.regions, page: 0, desc: t.desc };
 
   const tabsEl = document.getElementById('preview-tabs');
   tabsEl.innerHTML = '';
@@ -702,10 +735,11 @@ function renderPreview() {
   renderHexPane(currentTab);
 }
 
-function makeHdrRegions(baseOff, fnLen, dataLen) {
+function makeStep1Regions(fnLen) {
   return [
     {s:0,e:1,c:'hx-id'}, {s:1,e:8,c:'hx-rsv'},
-    {s:8,e:12,c:'hx-fnl'}, {s:12,e:16,c:'hx-dl'}
+    {s:8,e:12,c:'hx-fnl'}, {s:12,e:16,c:'hx-dl'},
+    {s:16,e:16+fnLen,c:'hx-fn'}
   ];
 }
 
@@ -722,14 +756,13 @@ function makeCombinedRegions(r) {
   const o1 = 0;
   const tblBlkEnd = 16 + tblFn + tblD;
   const o2 = tblBlkEnd;
-  const binBlkEnd = o2 + 16 + binFn + binD;
   return [
     {s:o1,e:o1+1,c:'hx-id'},{s:o1+1,e:o1+8,c:'hx-rsv'},
     {s:o1+8,e:o1+12,c:'hx-fnl'},{s:o1+12,e:o1+16,c:'hx-dl'},
     {s:o1+16,e:o1+16+tblFn,c:'hx-fn'},{s:o1+16+tblFn,e:tblBlkEnd,c:'hx-dat'},
     {s:o2,e:o2+1,c:'hx-id'},{s:o2+1,e:o2+8,c:'hx-rsv'},
     {s:o2+8,e:o2+12,c:'hx-fnl'},{s:o2+12,e:o2+16,c:'hx-dl'},
-    {s:o2+16,e:o2+16+binFn,c:'hx-fn'},{s:o2+16+binFn,e:binBlkEnd,c:'hx-dat'}
+    {s:o2+16,e:o2+16+binFn,c:'hx-fn'},{s:o2+16+binFn,e:o2+16+binFn+binD,c:'hx-dat'}
   ];
 }
 
@@ -757,7 +790,9 @@ function renderHexPane(id) {
   const startRow = page * ROWS_PER_PAGE;
   const endRow = Math.min(startRow + ROWS_PER_PAGE, totalRows);
 
-  let html = '<div class="hex-view">';
+  let html = '';
+  if (info.desc) html += `<div class="step-desc">${info.desc}</div>`;
+  html += '<div class="hex-view">';
   for (let row = startRow; row < endRow; row++) {
     const off = row * 16;
     let hexPart = '', ascPart = '';
